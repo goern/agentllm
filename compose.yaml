@@ -17,6 +17,8 @@ services:
 
       # Optional: Enable verbose logging
       WEBUI_DEBUG: "true"
+      ENABLE_FORWARD_USER_INFO_HEADERS: "true"
+
     volumes:
       - open-webui:/app/backend/data
     extra_hosts:

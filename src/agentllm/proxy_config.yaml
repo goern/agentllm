@@ -30,6 +30,15 @@ model_list:
 general_settings:
   master_key: "sk-agno-test-key-12345"  # Change this in production!
 
+  # Map OpenWebUI headers to LiteLLM user tracking
+  # Enable ENABLE_FORWARD_USER_INFO_HEADERS=true in OpenWebUI
+  user_header_name: X-OpenWebUI-User-Id
+  user_header_mappings:
+    - header_name: X-OpenWebUI-User-Id
+      litellm_user_role: internal_user
+    - header_name: X-OpenWebUI-User-Email
+      litellm_user_role: customer
+
 litellm_settings:
   drop_params: true  # Drop unsupported params instead of erroring
   set_verbose: false  # Disable verbose logging

@@ -44,10 +44,11 @@ class AgnoCustomLLM(CustomLLM):
     def _extract_session_info(self, kwargs: Dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
         """Extract session_id and user_id from request kwargs.
 
-        OpenWebUI and other clients may send session identifiers in different ways:
-        - metadata.session_id
-        - user (email or username)
-        - Custom headers passed through
+        Checks multiple sources in priority order:
+        1. Request body metadata (from OpenWebUI pipe functions)
+        2. OpenWebUI headers (X-OpenWebUI-User-Id, X-OpenWebUI-Chat-Id)
+        3. LiteLLM metadata
+        4. User field
 
         Args:
             kwargs: Request parameters
@@ -55,20 +56,63 @@ class AgnoCustomLLM(CustomLLM):
         Returns:
             Tuple of (session_id, user_id)
         """
-        # Try to extract user_id from metadata or user field
-        user_id = kwargs.get("user")
-        if not user_id and "metadata" in kwargs:
-            user_id = kwargs["metadata"].get("user_id") or kwargs["metadata"].get("user")
-
-        # Try to extract session_id from metadata
         session_id = None
-        if "metadata" in kwargs:
-            session_id = kwargs["metadata"].get("session_id") or kwargs["metadata"].get("conversation_id")
+        user_id = None
 
-        # If no session_id, we could use user_id as base for session
-        # Agno will auto-generate session_id if not provided
+        # 1. Check request body for metadata (from OpenWebUI pipe functions)
+        litellm_params = kwargs.get("litellm_params", {})
+        proxy_request = litellm_params.get("proxy_server_request", {})
+        request_body = proxy_request.get("body", {})
+        body_metadata = request_body.get("metadata", {})
 
-        logger.debug(f"Extracted session info: user_id={user_id}, session_id={session_id}")
+        if body_metadata:
+            session_id = body_metadata.get("session_id") or body_metadata.get("chat_id")
+            user_id = body_metadata.get("user_id")
+            logger.info(f"Found in body metadata: session_id={session_id}, user_id={user_id}")
+
+        # 2. Check OpenWebUI headers (ENABLE_FORWARD_USER_INFO_HEADERS)
+        headers = litellm_params.get("metadata", {}).get("headers", {})
+        if not session_id and headers:
+            # Check for chat_id header (might be X-OpenWebUI-Chat-Id)
+            session_id = (
+                headers.get("x-openwebui-chat-id") or
+                headers.get("X-OpenWebUI-Chat-Id")
+            )
+            logger.info(f"Found in headers: session_id={session_id}")
+
+        if not user_id and headers:
+            # Check for user_id header
+            user_id = (
+                headers.get("x-openwebui-user-id") or
+                headers.get("X-OpenWebUI-User-Id") or
+                headers.get("x-openwebui-user-email") or
+                headers.get("X-OpenWebUI-User-Email")
+            )
+            logger.info(f"Found in headers: user_id={user_id}")
+
+        # 3. Check LiteLLM metadata
+        if not session_id and "litellm_params" in kwargs:
+            litellm_metadata = litellm_params.get("metadata", {})
+            session_id = litellm_metadata.get("session_id") or litellm_metadata.get("conversation_id")
+            if session_id:
+                logger.info(f"Found in LiteLLM metadata: session_id={session_id}")
+
+        # 4. Fallback to user field
+        if not user_id:
+            user_id = kwargs.get("user")
+            if user_id:
+                logger.info(f"Found in user field: user_id={user_id}")
+
+        # Log what we're using
+        logger.info(f"Final extracted session info: user_id={user_id}, session_id={session_id}")
+
+        # Log full structure for debugging (only if nothing found)
+        if not session_id and not user_id:
+            logger.warning("No session/user info found! Logging full request structure:")
+            logger.warning(f"Headers available: {list(headers.keys()) if headers else 'None'}")
+            logger.warning(f"Body metadata keys: {list(body_metadata.keys()) if body_metadata else 'None'}")
+            logger.warning(f"LiteLLM metadata keys: {list(litellm_params.get('metadata', {}).keys())}")
+
         return session_id, user_id
 
     def completion(
