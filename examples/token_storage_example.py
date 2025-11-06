@@ -32,10 +32,15 @@ def example_jira_token_storage():
     jira_token_data = token_storage.get_jira_token(user_id)
     print(f"Retrieved Jira token: {jira_token_data}")
 
-    # Initialize JiraTools with database authentication
+    # Get credentials from token storage
+    if not jira_token_data:
+        raise ValueError(f"No Jira token found for user {user_id}")
+
+    # Initialize JiraTools with credentials
     _jira_tools = JiraTools(
-        token_storage=token_storage,
-        user_id=user_id,
+        token=jira_token_data["token"],
+        server_url=jira_token_data["server_url"],
+        username=jira_token_data.get("username"),
         get_issue=True,
         search_issues=True,
     )

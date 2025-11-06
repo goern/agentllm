@@ -22,16 +22,17 @@ class JiraConfig(BaseToolkitConfig):
         The token is validated by connecting to the Jira server.
     """
 
-    def __init__(self, jira_server: str = "https://issues.redhat.com"):
+    def __init__(self, jira_server: str = "https://issues.redhat.com", token_storage=None):
         """Initialize JIRA configuration.
 
         Args:
             jira_server: JIRA server URL
+            token_storage: TokenStorage instance for database-backed credentials
         """
-        super().__init__()
+        super().__init__(token_storage)
         self._jira_server = jira_server
 
-        # Store per-user JIRA toolkits
+        # Store per-user JIRA toolkits (in-memory cache)
         self._jira_toolkits: dict[str, JiraTools] = {}
 
     def is_configured(self, user_id: str) -> bool:
@@ -43,10 +44,17 @@ class JiraConfig(BaseToolkitConfig):
         Returns:
             True if user has a valid JIRA token
         """
-        if user_id not in self._user_configs:
-            return False
+        # Check database storage first (preferred)
+        if self.token_storage:
+            token_data = self.token_storage.get_jira_token(user_id)
+            if token_data:
+                return True
 
-        return "jira_token" in self._user_configs[user_id]
+        # Fall back to legacy in-memory storage
+        if user_id in self._user_configs and "jira_token" in self._user_configs[user_id]:
+            return True
+
+        return False
 
     def extract_and_store_config(self, message: str, user_id: str) -> str | None:
         """Extract and store JIRA token from user message.
@@ -99,13 +107,23 @@ class JiraConfig(BaseToolkitConfig):
 
             logger.info(f"Jira token validated successfully for user {user_id}")
 
+            # Store the token in database if available, otherwise in memory
+            if self.token_storage:
+                self.token_storage.upsert_jira_token(
+                    user_id=user_id,
+                    token=token,
+                    server_url=self._jira_server,
+                )
+                logger.info(f"Stored Jira token in database for user {user_id}")
+            else:
+                # Fall back to in-memory storage (legacy)
+                if user_id not in self._user_configs:
+                    self._user_configs[user_id] = {}
+                self._user_configs[user_id]["jira_token"] = token
+                logger.info(f"Stored Jira token in memory for user {user_id}")
+
             # Store the toolkit for this user
             self._jira_toolkits[user_id] = toolkit
-
-            # Store the token
-            if user_id not in self._user_configs:
-                self._user_configs[user_id] = {}
-            self._user_configs[user_id]["jira_token"] = token
 
             # Return confirmation with validation message
             return (
@@ -156,21 +174,50 @@ class JiraConfig(BaseToolkitConfig):
             return self._jira_toolkits[user_id]
 
         # If we have token but no toolkit (e.g., after restart), recreate it
-        if self.is_configured(user_id):
-            token = self._user_configs[user_id]["jira_token"]
-            toolkit = JiraTools(
-                token=token,
-                server_url=self._jira_server,
-                get_issue=True,
-                search_issues=True,
-                add_comment=False,
-                create_issue=False,
-            )
-            self._jira_toolkits[user_id] = toolkit
-            logger.info(f"Recreated JIRA toolkit for user {user_id}")
-            return toolkit
+        if not self.is_configured(user_id):
+            return None
 
-        return None
+        # Recreate toolkit from database or memory
+        toolkit = None
+        if self.token_storage:
+            # Get credentials from database
+            try:
+                token_data = self.token_storage.get_jira_token(user_id)
+                if not token_data:
+                    logger.error(f"No Jira token found in database for user {user_id}")
+                    return None
+
+                toolkit = JiraTools(
+                    token=token_data["token"],
+                    server_url=token_data["server_url"],
+                    username=token_data.get("username"),
+                    get_issue=True,
+                    search_issues=True,
+                    add_comment=False,
+                    create_issue=False,
+                )
+                logger.info(f"Recreated JIRA toolkit from database for user {user_id}")
+            except Exception as e:
+                logger.error(f"Failed to create JIRA toolkit from database: {e}")
+                return None
+        else:
+            # Use legacy in-memory authentication
+            if user_id in self._user_configs and "jira_token" in self._user_configs[user_id]:
+                token = self._user_configs[user_id]["jira_token"]
+                toolkit = JiraTools(
+                    token=token,
+                    server_url=self._jira_server,
+                    get_issue=True,
+                    search_issues=True,
+                    add_comment=False,
+                    create_issue=False,
+                )
+                logger.info(f"Recreated JIRA toolkit (legacy) for user {user_id}")
+
+        if toolkit:
+            self._jira_toolkits[user_id] = toolkit
+
+        return toolkit
 
     def check_authorization_request(self, message: str, user_id: str) -> str | None:
         """Check if message requests JIRA access and prompt if needed.

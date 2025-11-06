@@ -109,22 +109,22 @@ class JiraTools(Toolkit):
         create_issue: bool = False,
         **kwargs,
     ):
-        """Initialize Jira toolkit with provided credentials.
+        """Initialize Jira toolkit with credentials.
 
         Args:
             token: Jira personal access token
-            server_url: Jira server URL (e.g., "https://issues.redhat.com")
-            username: Optional username for basic auth (token-only auth if not provided)
+            server_url: Jira server URL
+            username: Optional username for basic auth
             get_issue: Include get_issue tool (default: True)
             search_issues: Include search_issues tool (default: True)
             add_comment: Include add_comment tool (default: False)
             create_issue: Include create_issue tool (default: False)
             **kwargs: Additional arguments passed to parent Toolkit
         """
-        # Store credentials
         self._token = token
         self._server_url = server_url
         self._username = username
+
         self._jira_client: JIRA | None = None
 
         tools: list[Any] = []
