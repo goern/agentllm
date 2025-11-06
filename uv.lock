@@ -10,7 +10,7 @@ resolution-markers = [
 [[package]]
 name = "agentllm"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "agno" },
     { name = "litellm", extra = ["proxy"] },
