@@ -1,29 +1,80 @@
 services:
+  litellm-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    container_name: litellm-proxy
+    ports:
+      - "8890:8890"
+    environment:
+      # Required API Keys
+      GEMINI_API_KEY: "${GEMINI_API_KEY}"
+      LITELLM_MASTER_KEY: "${LITELLM_MASTER_KEY:-sk-agno-test-key-12345}"
+
+      # Optional: Google Drive integration
+      GDRIVE_CLIENT_ID: "${GDRIVE_CLIENT_ID}"
+      GDRIVE_CLIENT_SECRET: "${GDRIVE_CLIENT_SECRET}"
+
+      # Database configuration
+      DB_PATH: "/app/tmp/agno_sessions.db"
+
+      # Python configuration
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: "/app"
+    volumes:
+      # Mount local code for development (hot reload)
+      - ./src/agentllm:/app/agentllm
+      # Persist database and workspace
+      - litellm-data:/app/tmp
+      # Mount config at app root for proper imports
+      - ./src/agentllm/proxy_config.yaml:/app/proxy_config.yaml:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8890/health/readiness"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
     ports:
       - "3000:8080"
     environment:
-      # Point to the LiteLLM proxy running on host
-      OPENAI_API_BASE_URLS: "http://host.docker.internal:8890/v1"
-      OPENAI_API_KEYS: "sk-agno-test-key-12345"
+      # Point to the LiteLLM proxy container
+      OPENAI_API_BASE_URLS: "http://litellm-proxy:8890/v1"
+      OPENAI_API_KEYS: "${LITELLM_MASTER_KEY:-sk-agno-test-key-12345}"
 
-      # Optional: Disable other providers
+      # Disable other providers
       ENABLE_OLLAMA_API: "false"
 
-      # Optional: Set default model
+      # Set default model
       DEFAULT_MODELS: "agno/release-manager"
 
-      # Optional: Enable verbose logging
+      # Enable verbose logging
       WEBUI_DEBUG: "true"
       ENABLE_FORWARD_USER_INFO_HEADERS: "true"
 
+      # Google OAuth for user authentication (optional)
+      ENABLE_OAUTH_SIGNUP: "${ENABLE_OAUTH_SIGNUP:-false}"
+      OAUTH_PROVIDER_NAME: "Google"
+      OAUTH_CLIENT_ID: "${OAUTH_CLIENT_ID}"
+      OAUTH_CLIENT_SECRET: "${OAUTH_CLIENT_SECRET}"
+      OAUTH_SCOPES: "openid email profile"
+      OPENID_PROVIDER_URL: "https://accounts.google.com/.well-known/openid-configuration"
+      OAUTH_MERGE_ACCOUNTS_BY_EMAIL: "true"
+
+      # UI Customization
+      WEBUI_NAME: "Sidekick Agent (Local)"
+
     volumes:
       - open-webui:/app/backend/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      litellm-proxy:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
   open-webui:
+  litellm-data:

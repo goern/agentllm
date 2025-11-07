@@ -1,0 +1,52 @@
+# Local development Dockerfile for LiteLLM Proxy with Agno Custom Handler
+# Optimized for fast rebuilds and development workflow
+
+FROM python:3.11-slim
+
+# Install system dependencies including curl for healthchecks and build tools for html-to-markdown
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for fast dependency management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Set working directory
+WORKDIR /app
+
+# Copy only dependency files first (for layer caching)
+COPY pyproject.toml ./
+
+# Install dependencies from pyproject.toml (not editable, just deps)
+RUN uv pip install --system --no-cache \
+    agno>=2.2.8 \
+    jira>=3.0.0 \
+    litellm[proxy]>=1.79.1 \
+    loguru>=0.7.0 \
+    sqlalchemy>=2.0.0 \
+    google-genai>=0.2.0 \
+    google-auth-oauthlib>=1.0.0 \
+    google-api-python-client>=2.0.0 \
+    html-to-markdown>=1.0.0
+
+# Create directories for data persistence
+RUN mkdir -p /app/tmp/gdrive_workspace
+
+# Create a minimal package structure (will be overridden by volume mount)
+# This ensures the package exists during startup before volume is fully mounted
+RUN mkdir -p /app/agentllm && touch /app/agentllm/__init__.py
+
+# Note: Application code is mounted as a volume in docker-compose
+# This allows for hot-reloading during development
+
+# Set Python environment
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+# Expose LiteLLM proxy port
+EXPOSE 8890
+
+# Run LiteLLM proxy
+CMD ["litellm", "--config", "/app/proxy_config.yaml", "--port", "8890", "--host", "0.0.0.0"]
