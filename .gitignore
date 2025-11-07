@@ -50,3 +50,6 @@ dmypy.json
 agno_handler.log
 tmp/
 *.db
+
+# Claude
+.claude/settings.local.json
