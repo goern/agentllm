@@ -1,7 +1,9 @@
 """Custom LiteLLM handler for Agno provider using dynamic registration."""
 
 import logging
+import os
 from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 from typing import Any
 
 import litellm
@@ -14,8 +16,12 @@ from agentllm.agents.release_manager import ReleaseManager
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# Determine log file path - use temp directory (consistent with DB and gdrive workspace)
+log_dir = os.getenv("AGENTLLM_DATA_DIR", "tmp")
+log_file = Path(log_dir) / "agno_handler.log"
+
 # File handler for detailed logs
-file_handler = logging.FileHandler("agno_handler.log")
+file_handler = logging.FileHandler(log_file)
 file_handler.setLevel(logging.DEBUG)
 file_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 
