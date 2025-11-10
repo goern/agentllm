@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: © 2025 Christoph Görn <goern@b4mad.net>
+# SPDX-License-Identifier: GPL-3.0-only
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: agentllm-stage
+
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/environment: stage
+
+resources:
+  - ../../agentllm
+  - ../../open-webui
+  - agentllm_secret.yaml
+  - open-webui_secret.yaml
+  - ingress.yaml
+
+replicas:
+  - name: agentllm
+    count: 1
+
+images:
+  - name: agentllm
+    newName: codeberg.org/b4mad/agentllm/agentllm
+    newTag: v0.1.0-8472087
+
+  - name: open-webui
+    newName: ghcr.io/open-webui/open-webui
+    newtag: main
+
+patches:
+  - target:
+      kind: Deployment
+      name: agentllm
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "512Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "1000m"

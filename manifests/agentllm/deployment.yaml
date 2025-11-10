@@ -1,0 +1,75 @@
+# SPDX-FileCopyrightText: © 2025 Christoph Görn <goern@b4mad.net>
+# SPDX-License-Identifier: GPL-3.0-only
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agentllm
+  labels:
+    kueue.x-k8s.io/queue-name: backend-services
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: agentllm
+          image: agentllm
+          ports:
+            - containerPort: 8890
+              name: http
+              protocol: TCP
+          env:
+            - name: LITELLM_NUM_WORKER_THREADS
+              value: "4"
+            - name: AGENTLLM_DATA_DIR
+              value: /logs
+            - name: AGENTLLM_DB_PATH
+              value: /db/agentllm.db
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentllm
+                  key: ANTHROPIC_API_KEY
+            - name: OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentllm
+                  key: OPENROUTER_API_KEY
+            - name: LITELLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: agentllm
+                  key: LITELLM_API_KEY
+          volumeMounts:
+            - name: db-storage
+              mountPath: /db
+            - name: logs-storage
+              mountPath: /logs
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+      volumes:
+        - name: db-storage
+          emptyDir: {}
+        - name: logs-storage
+          emptyDir: {}

@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: © 2025 Christoph Görn <goern@b4mad.net>
+# SPDX-License-Identifier: GPL-3.0-only
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: agentllm
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8890
+      targetPort: http
+      protocol: TCP
+      name: http

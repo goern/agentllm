@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    haproxy.router.openshift.io/timeout: 120s
+    kubernetes.io/ingress.allow-http: "false"
+  name: open-webui
+spec:
+  ingressClassName: openshift-default
+  rules:
+    - host: openwebui.bonn.machdenstaat.de
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: open-webui
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - openwebui.bonn.machdenstaat.de
+      secretName: openwebui.bonn.machdenstaat.de

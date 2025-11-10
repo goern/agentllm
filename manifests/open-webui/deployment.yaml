@@ -1,0 +1,54 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: open-webui
+spec:
+  replicas: 1
+  template:
+    spec:
+      serviceAccount: open-webui
+      containers:
+        - name: open-webui
+          image: open-webui
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ENABLE_OAUTH_SIGNUP
+              value: "true"
+            - name: OAUTH_CLIENT_ID
+              value: openwebui
+            - name: OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: openwebui
+                  key: oauth-client-secret
+            - name: OPENID_PROVIDER_URL
+              value: https://keycloak.erdgeschoss.b4mad.net/realms/erdgeschoss/.well-known/openid-configuration
+            - name: WEBUI_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openwebui
+                  key: webui-secret-key
+            - name: ENABLE_FORWARD_USER_INFO_HEADER
+              value: "true"
+            - name: OPENAI_API_BASE_URLS
+              value: http://agentllm:8890/v1
+            - name: OPENAI_API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: agentllm
+                  key: LITELLM_API_KEY
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              memory: 500Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: open-webui-data
+              mountPath: /app/backend/data
+      volumes:
+        - name: open-webui-data
+          persistentVolumeClaim:
+            claimName: open-webui-data
