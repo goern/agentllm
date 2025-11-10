@@ -214,21 +214,79 @@ def get_agent(
 
 ## Running with Open WebUI
 
-### Quick Start
+The project supports two development modes to accommodate different workflows.
 
-**Prerequisites**: Make sure you have your Gemini API key configured (all agents and models use Gemini):
+### Development Mode (Recommended)
+
+**Use case:** Fast iteration on proxy/agent code with live debugging
+
+Run the LiteLLM proxy locally and Open WebUI in a container:
+
 ```bash
-export GEMINI_API_KEY="your-gemini-api-key-here"
+# Terminal 1: Start local proxy with hot reload
+nox -s proxy
+
+# Terminal 2: Start Open WebUI (connects to local proxy)
+nox -s dev_local_proxy
 ```
 
-1. **Start the LiteLLM proxy** (in one terminal):
+**How it works:**
+- Proxy runs locally with instant code reloading
+- Open WebUI runs in Docker and connects to proxy via `http://host.docker.internal:8890/v1`
+- Works on all platforms (Mac, Linux, Windows)
+- Configuration in `.env`: `LITELLM_PROXY_URL=http://host.docker.internal:8890/v1`
+
+**Advantages:**
+- ✨ Instant code reloading for proxy changes
+- 🐛 Easy debugging with local debuggers
+- 📊 Direct log access in terminal
+- 💨 Lower resource usage
+
+### Production Mode (Full Container Stack)
+
+**Use case:** Testing the complete containerized setup
+
+Run both services in containers:
+
+```bash
+# Start both services (foreground)
+nox -s dev_full
+
+# Or in background
+nox -s dev_full -- -d
+```
+
+**How it works:**
+- Both LiteLLM proxy and Open WebUI run in Docker
+- Services communicate via internal Docker network
+- Matches production deployment architecture
+
+**Advantages:**
+- 🏭 Production-like environment
+- 🐳 Tests full Docker setup
+- 👥 Easier for non-Python developers
+
+### Quick Start
+
+1. **Configure environment**:
    ```bash
-   nox -s proxy
+   cp .env.example .env
+   # Edit .env and add your GEMINI_API_KEY
    ```
 
-2. **Start Open WebUI** (in another terminal):
+2. **Choose your mode and start**:
+
+   For development mode:
    ```bash
-   docker compose up
+   # Terminal 1
+   nox -s proxy
+   # Terminal 2
+   nox -s dev_local_proxy
+   ```
+
+   For production mode:
+   ```bash
+   nox -s dev_full
    ```
 
 3. **Access Open WebUI**:
@@ -241,22 +299,33 @@ export GEMINI_API_KEY="your-gemini-api-key-here"
    - Choose `agno/release-manager`
    - Start chatting with your Agno agent!
 
-### Configuration
-
-The `compose.yaml` connects Open WebUI to your LiteLLM proxy with:
-- **API Base**: `http://host.docker.internal:8890/v1`
-- **API Key**: `sk-agno-test-key-12345`
-- **Web UI**: http://localhost:3000
-
-### Stopping
+### Useful Commands
 
 ```bash
-# Stop Open WebUI
-docker compose down
+# View logs from containers
+nox -s dev_logs                    # All services
+nox -s dev_logs -- litellm-proxy   # Specific service
 
-# Stop proxy
-# Press Ctrl+C in the terminal running nox -s proxy
+# Stop containers (preserves data)
+nox -s dev_stop
+
+# Clean everything (including volumes)
+nox -s dev_clean
 ```
+
+### Configuration Details
+
+The connection between Open WebUI and LiteLLM proxy is controlled by `LITELLM_PROXY_URL` in `.env`:
+
+```bash
+# Development mode (default)
+LITELLM_PROXY_URL=http://host.docker.internal:8890/v1
+
+# Production mode (set automatically by nox -s dev_full)
+LITELLM_PROXY_URL=http://litellm-proxy:8890/v1
+```
+
+**No manual .env editing needed** - just use the appropriate `nox` command!
 
 ## Configuration
 

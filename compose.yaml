@@ -26,8 +26,8 @@ services:
       - ./src/agentllm:/app/agentllm
       # Persist database and workspace
       - litellm-data:/app/tmp
-      # Mount config at app root for proper imports
-      - ./src/agentllm/proxy_config.yaml:/app/proxy_config.yaml:ro
+      # Mount config from project root (for LiteLLM path resolution)
+      - ./proxy_config.yaml:/app/proxy_config.yaml:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8890/health/readiness"]
@@ -42,8 +42,10 @@ services:
     ports:
       - "3000:8080"
     environment:
-      # Point to the LiteLLM proxy container
-      OPENAI_API_BASE_URLS: "http://litellm-proxy:8890/v1"
+      # Point to the LiteLLM proxy (configurable for local dev or containerized mode)
+      # Dev mode (local proxy): Set LITELLM_PROXY_URL=http://host.docker.internal:8890/v1
+      # Production mode (both containerized): Uses default http://litellm-proxy:8890/v1
+      OPENAI_API_BASE_URLS: "${LITELLM_PROXY_URL:-http://litellm-proxy:8890/v1}"
       OPENAI_API_KEYS: "${LITELLM_MASTER_KEY:-sk-agno-test-key-12345}"
 
       # Disable other providers
@@ -68,11 +70,15 @@ services:
       # UI Customization
       WEBUI_NAME: "Sidekick Agent (Local)"
 
+    # Enable host.docker.internal on all platforms (including Linux)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     volumes:
       - open-webui:/app/backend/data
-    depends_on:
-      litellm-proxy:
-        condition: service_healthy
+    # depends_on:
+    #   litellm-proxy:
+    #     condition: service_healthy
     restart: unless-stopped
 
 volumes:

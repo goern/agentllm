@@ -36,7 +36,7 @@ def proxy(session):
         "run",
         "litellm",
         "--config",
-        "src/agentllm/proxy_config.yaml",
+        "proxy_config.yaml",
         "--port",
         "8890",
         "--detailed_debug",
@@ -226,6 +226,103 @@ def dev_build(session):
 
     print("🔨 Building and starting development environment...")
     session.run("docker", "compose", "up", "--build", external=True)
+
+
+@nox.session(venv_backend="none")
+def dev_local_proxy(session):
+    """Start only Open WebUI for local proxy development.
+
+    This mode is for when you want to run the LiteLLM proxy locally (nox -s proxy)
+    and only run Open WebUI in a container.
+
+    Prerequisites:
+        1. Ensure LITELLM_PROXY_URL is set in .env (default: http://host.docker.internal:8890/v1)
+        2. Start the proxy locally: nox -s proxy
+
+    Examples:
+        # Terminal 1: Start local proxy
+        nox -s proxy
+
+        # Terminal 2: Start Open WebUI
+        nox -s dev-local-proxy
+    """
+    import subprocess
+    import sys
+
+    _check_env()
+
+    # Check if proxy is running locally
+    print("🔍 Checking if local proxy is running on port 8890...")
+    result = subprocess.run(["lsof", "-i:8890"], capture_output=True, text=True)
+
+    if result.returncode != 0:
+        print("⚠️  Warning: No service detected on port 8890")
+        print("\n💡 Start the local proxy first:")
+        print("   nox -s proxy")
+        print("\nOr if you want both services in containers, use:")
+        print("   nox -s dev_full\n")
+
+        response = input("Continue anyway? (y/N) ")
+        if response.lower() != "y":
+            print("Cancelled")
+            sys.exit(0)
+
+    print("🚀 Starting Open WebUI (will connect to local proxy)...\n")
+
+    args = ["docker", "compose", "up", "open-webui"]
+
+    # Parse session arguments
+    if session.posargs:
+        if "-d" in session.posargs or "--detach" in session.posargs:
+            args.append("-d")
+
+    try:
+        session.run(*args, external=True)
+    except KeyboardInterrupt:
+        print("\n\n⏹️  Stopping Open WebUI...")
+        session.run("docker", "compose", "stop", "open-webui", external=True)
+        sys.exit(0)
+
+
+@nox.session(venv_backend="none")
+def dev_full(session):
+    """Start both LiteLLM proxy and Open WebUI in containers (production-like).
+
+    This mode runs everything containerized, useful for testing the full stack
+    or when you don't need to modify the proxy code.
+
+    Examples:
+        nox -s dev-full              # Start in foreground
+        nox -s dev-full -- -d        # Start in background (detached)
+    """
+    import os
+    import sys
+
+    _check_env()
+
+    # Override LITELLM_PROXY_URL to use container name
+    env = os.environ.copy()
+    env["LITELLM_PROXY_URL"] = "http://litellm-proxy:8890/v1"
+
+    args = ["docker", "compose", "up"]
+
+    # Parse session arguments
+    if session.posargs:
+        if "--build" in session.posargs:
+            args.append("--build")
+        if "-d" in session.posargs or "--detach" in session.posargs:
+            args.append("-d")
+
+    print("🚀 Starting full containerized environment...")
+    print("   LiteLLM Proxy: http://litellm-proxy:8890/v1 (internal)")
+    print("   Open WebUI:    http://localhost:3000\n")
+
+    try:
+        session.run(*args, external=True, env=env)
+    except KeyboardInterrupt:
+        print("\n\n⏹️  Stopping containers...")
+        session.run("docker", "compose", "down", external=True)
+        sys.exit(0)
 
 
 @nox.session(venv_backend="none")
