@@ -29,9 +29,7 @@ class TestAgnoCustomLLM:
         handler = AgnoCustomLLM()
 
         # Should work with just "release-manager"
-        response = handler.completion(
-            model="release-manager", messages=[{"role": "user", "content": "Test"}]
-        )
+        response = handler.completion(model="release-manager", messages=[{"role": "user", "content": "Test"}])
 
         assert response is not None
         assert response.choices[0]["message"]["role"] == "assistant"
@@ -41,9 +39,7 @@ class TestAgnoCustomLLM:
         handler = AgnoCustomLLM()
 
         with pytest.raises(Exception) as exc_info:
-            handler.completion(
-                model="agno/nonexistent", messages=[{"role": "user", "content": "Test"}]
-            )
+            handler.completion(model="agno/nonexistent", messages=[{"role": "user", "content": "Test"}])
 
         assert "not found" in str(exc_info.value).lower()
 
@@ -94,9 +90,7 @@ class TestAgnoCustomLLM:
         """Test that ModelResponse has correct structure."""
         handler = AgnoCustomLLM()
 
-        response = handler.completion(
-            model="release-manager", messages=[{"role": "user", "content": "Test"}]
-        )
+        response = handler.completion(model="release-manager", messages=[{"role": "user", "content": "Test"}])
 
         # Check required fields
         assert hasattr(response, "model")

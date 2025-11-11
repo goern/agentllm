@@ -244,8 +244,7 @@ class GDriveServiceAccountConfig(BaseToolkitConfig):
 
         # No service account configured
         logger.warning(
-            "Google Drive service account not configured. "
-            "Set GDRIVE_SERVICE_ACCOUNT_PATH or GDRIVE_SERVICE_ACCOUNT_JSON to enable."
+            "Google Drive service account not configured. Set GDRIVE_SERVICE_ACCOUNT_PATH or GDRIVE_SERVICE_ACCOUNT_JSON to enable."
         )
 
     def _load_credentials_from_file(self, key_path: str) -> service_account.Credentials:
@@ -266,9 +265,7 @@ class GDriveServiceAccountConfig(BaseToolkitConfig):
             raise FileNotFoundError(f"Service account key file not found: {key_path}")
 
         try:
-            credentials = service_account.Credentials.from_service_account_file(
-                str(path), scopes=self.SCOPES
-            )
+            credentials = service_account.Credentials.from_service_account_file(str(path), scopes=self.SCOPES)
             logger.debug(f"Service account email: {credentials.service_account_email}")
             return credentials
         except Exception as e:
@@ -288,9 +285,7 @@ class GDriveServiceAccountConfig(BaseToolkitConfig):
         """
         try:
             key_data = json.loads(key_json)
-            credentials = service_account.Credentials.from_service_account_info(
-                key_data, scopes=self.SCOPES
-            )
+            credentials = service_account.Credentials.from_service_account_info(key_data, scopes=self.SCOPES)
             logger.debug(f"Service account email: {credentials.service_account_email}")
             return credentials
         except json.JSONDecodeError as e:

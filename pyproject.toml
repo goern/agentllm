@@ -9,6 +9,7 @@ dependencies = [
   "google-auth-oauthlib>=1.0.0",
   "google-api-python-client>=2.0.0",
   "html-to-markdown>=1.0.0",
+  "anthropic>=0.72.1",
 ]
 description = "Custom LiteLLM provider for Agno agents - OpenAI-compatible API for Agno"
 name = "agentllm"

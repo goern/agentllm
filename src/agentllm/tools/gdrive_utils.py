@@ -94,9 +94,7 @@ class GoogleDriveExporter:
 
     # Document export formats
     DOCUMENT_EXPORT_FORMATS: dict[str, ExportFormat] = {
-        "pdf": ExportFormat(
-            extension="pdf", mime_type="application/pdf", description="Portable Document Format"
-        ),
+        "pdf": ExportFormat(extension="pdf", mime_type="application/pdf", description="Portable Document Format"),
         "docx": ExportFormat(
             extension="docx",
             mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -107,25 +105,17 @@ class GoogleDriveExporter:
             mime_type="application/vnd.oasis.opendocument.text",
             description="OpenDocument Text",
         ),
-        "rtf": ExportFormat(
-            extension="rtf", mime_type="application/rtf", description="Rich Text Format"
-        ),
+        "rtf": ExportFormat(extension="rtf", mime_type="application/rtf", description="Rich Text Format"),
         "txt": ExportFormat(extension="txt", mime_type="text/plain", description="Plain Text"),
         "html": ExportFormat(extension="html", mime_type="text/html", description="HTML Document"),
-        "epub": ExportFormat(
-            extension="epub", mime_type="application/epub+zip", description="EPUB eBook"
-        ),
-        "zip": ExportFormat(
-            extension="zip", mime_type="application/zip", description="HTML Zipped"
-        ),
+        "epub": ExportFormat(extension="epub", mime_type="application/epub+zip", description="EPUB eBook"),
+        "zip": ExportFormat(extension="zip", mime_type="application/zip", description="HTML Zipped"),
         "md": ExportFormat(extension="md", mime_type="text/html", description="Markdown Document"),
     }
 
     # Spreadsheet export formats
     SPREADSHEET_EXPORT_FORMATS: dict[str, ExportFormat] = {
-        "pdf": ExportFormat(
-            extension="pdf", mime_type="application/pdf", description="Portable Document Format"
-        ),
+        "pdf": ExportFormat(extension="pdf", mime_type="application/pdf", description="Portable Document Format"),
         "xlsx": ExportFormat(
             extension="xlsx",
             mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -136,17 +126,13 @@ class GoogleDriveExporter:
             mime_type="application/x-vnd.oasis.opendocument.spreadsheet",
             description="OpenDocument Spreadsheet",
         ),
-        "csv": ExportFormat(
-            extension="csv", mime_type="text/csv", description="Comma-Separated Values"
-        ),
+        "csv": ExportFormat(extension="csv", mime_type="text/csv", description="Comma-Separated Values"),
         "tsv": ExportFormat(
             extension="tsv",
             mime_type="text/tab-separated-values",
             description="Tab-Separated Values",
         ),
-        "zip": ExportFormat(
-            extension="zip", mime_type="application/zip", description="HTML Zipped"
-        ),
+        "zip": ExportFormat(extension="zip", mime_type="application/zip", description="HTML Zipped"),
     }
 
     # Presentation export formats
@@ -161,9 +147,7 @@ class GoogleDriveExporter:
             mime_type="application/vnd.oasis.opendocument.presentation",
             description="OpenDocument Presentation",
         ),
-        "pdf": ExportFormat(
-            extension="pdf", mime_type="application/pdf", description="Portable Document Format"
-        ),
+        "pdf": ExportFormat(extension="pdf", mime_type="application/pdf", description="Portable Document Format"),
         "txt": ExportFormat(extension="txt", mime_type="text/plain", description="Plain Text"),
         "html": ExportFormat(extension="html", mime_type="text/html", description="HTML Document"),
     }
@@ -219,9 +203,7 @@ class GoogleDriveExporter:
 
         if self.config.token_path.exists():
             logger.debug(f"Loading credentials from {self.config.token_path}")
-            creds = Credentials.from_authorized_user_file(
-                str(self.config.token_path), self.config.scopes
-            )
+            creds = Credentials.from_authorized_user_file(str(self.config.token_path), self.config.scopes)
 
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
@@ -229,14 +211,10 @@ class GoogleDriveExporter:
                 creds.refresh(google.auth.transport.requests.Request())
             else:
                 if not self.config.credentials_path.exists():
-                    raise FileNotFoundError(
-                        f"Credentials file not found: {self.config.credentials_path}"
-                    )
+                    raise FileNotFoundError(f"Credentials file not found: {self.config.credentials_path}")
 
                 logger.info("Running OAuth flow for new credentials")
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    str(self.config.credentials_path), self.config.scopes
-                )
+                flow = InstalledAppFlow.from_client_secrets_file(str(self.config.credentials_path), self.config.scopes)
                 creds = flow.run_local_server(port=0)
 
             # Save credentials for next run
@@ -376,9 +354,7 @@ class GoogleDriveExporter:
                     try:
                         doc_config = self._parse_config_line(line)
                         documents.append(doc_config)
-                        logger.debug(
-                            f"Parsed document: {doc_config.document_id} (depth={doc_config.depth})"
-                        )
+                        logger.debug(f"Parsed document: {doc_config.document_id} (depth={doc_config.depth})")
                     except Exception as e:
                         logger.error(f"Error parsing line {line_num}: {line} - {e}")
                         continue
@@ -427,9 +403,7 @@ class GoogleDriveExporter:
 
         return DocumentConfig(url=url, document_id=document_id, depth=depth, comment=comment)
 
-    def get_document_metadata(
-        self, document_id: str, doc_type: DocumentType | None = None
-    ) -> dict[str, Any]:
+    def get_document_metadata(self, document_id: str, doc_type: DocumentType | None = None) -> dict[str, Any]:
         """Get metadata for a document using multiple fallback methods.
 
         Args:
@@ -461,11 +435,7 @@ class GoogleDriveExporter:
             # Method 2: Standard files().get() API
             try:
                 logger.debug("Trying Method 2: files().get() API...")
-                metadata = (
-                    self.service.files()
-                    .get(fileId=document_id, fields="name,mimeType,modifiedTime,owners,createdTime")
-                    .execute()
-                )
+                metadata = self.service.files().get(fileId=document_id, fields="name,mimeType,modifiedTime,owners,createdTime").execute()
                 logger.debug(f"✅ Method 2 Success: {metadata.get('name')}")
                 return cast(dict[str, Any], metadata)
             except HttpError as drive_error:
@@ -511,9 +481,7 @@ class GoogleDriveExporter:
                         self._sheets_service = build("sheets", "v4", credentials=creds)
 
                     # Get spreadsheet metadata
-                    sheet = (
-                        self._sheets_service.spreadsheets().get(spreadsheetId=document_id).execute()
-                    )
+                    sheet = self._sheets_service.spreadsheets().get(spreadsheetId=document_id).execute()
 
                     sheets_metadata = {
                         "name": sheet.get("properties", {}).get("title", "untitled"),
@@ -537,11 +505,7 @@ class GoogleDriveExporter:
                         self._slides_service = build("slides", "v1", credentials=creds)
 
                     # Get presentation metadata
-                    presentation = (
-                        self._slides_service.presentations()
-                        .get(presentationId=document_id)
-                        .execute()
-                    )
+                    presentation = self._slides_service.presentations().get(presentationId=document_id).execute()
 
                     slides_metadata = {
                         "name": presentation.get("title", "untitled"),
@@ -575,17 +539,11 @@ class GoogleDriveExporter:
 
                 # Provide appropriate URL based on document type
                 if doc_type == DocumentType.SPREADSHEET:
-                    logger.error(
-                        f"Spreadsheet URL: https://docs.google.com/spreadsheets/d/{document_id}/edit"
-                    )
+                    logger.error(f"Spreadsheet URL: https://docs.google.com/spreadsheets/d/{document_id}/edit")
                 elif doc_type == DocumentType.PRESENTATION:
-                    logger.error(
-                        f"Presentation URL: https://docs.google.com/presentation/d/{document_id}/edit"
-                    )
+                    logger.error(f"Presentation URL: https://docs.google.com/presentation/d/{document_id}/edit")
                 else:
-                    logger.error(
-                        f"Document URL: https://docs.google.com/document/d/{document_id}/edit"
-                    )
+                    logger.error(f"Document URL: https://docs.google.com/document/d/{document_id}/edit")
             elif error.resp.status == 403:
                 logger.error(f"Permission denied for document: {document_id}")
                 logger.error("The document exists but you don't have access permissions")
@@ -621,9 +579,7 @@ class GoogleDriveExporter:
             export_formats = self.DOCUMENT_EXPORT_FORMATS
 
         if format_key not in export_formats:
-            logger.error(
-                f"Format '{format_key}' not supported for {doc_type.value if doc_type else 'document'} type"
-            )
+            logger.error(f"Format '{format_key}' not supported for {doc_type.value if doc_type else 'document'} type")
             return False
 
         export_format = export_formats[format_key]
@@ -639,13 +595,9 @@ class GoogleDriveExporter:
                     logger.warning("Markdown export not supported for presentations")
                     return False
                 # Export as HTML first for documents
-                request = self.service.files().export_media(
-                    fileId=document_id, mimeType="text/html"
-                )
+                request = self.service.files().export_media(fileId=document_id, mimeType="text/html")
             else:
-                request = self.service.files().export_media(
-                    fileId=document_id, mimeType=export_format.mime_type
-                )
+                request = self.service.files().export_media(fileId=document_id, mimeType=export_format.mime_type)
 
             fh = io.BytesIO()
             downloader = MediaIoBaseDownload(fh, request)
@@ -750,9 +702,7 @@ class GoogleDriveExporter:
             logger.error(f"Failed to extract links from {html_path}: {e}")
             return []
 
-    def export_all_sheets_as_csv(
-        self, spreadsheet_id: str, output_dir: Path, spreadsheet_title: str
-    ) -> bool:
+    def export_all_sheets_as_csv(self, spreadsheet_id: str, output_dir: Path, spreadsheet_title: str) -> bool:
         """Export all sheets from a Google Spreadsheet as separate CSV files.
 
         Args:
@@ -770,9 +720,7 @@ class GoogleDriveExporter:
                 self._sheets_service = build("sheets", "v4", credentials=creds)
 
             # Get spreadsheet metadata
-            spreadsheet = (
-                self._sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
-            )
+            spreadsheet = self._sheets_service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
             title = spreadsheet["properties"]["title"]
             sheets = spreadsheet["sheets"]
 
@@ -793,10 +741,7 @@ class GoogleDriveExporter:
                 # Get sheet data
                 try:
                     result = (
-                        self._sheets_service.spreadsheets()
-                        .values()
-                        .get(spreadsheetId=spreadsheet_id, range=f"'{sheet_name}'")
-                        .execute()
+                        self._sheets_service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=f"'{sheet_name}'").execute()
                     )
 
                     values = result.get("values", [])
@@ -832,9 +777,7 @@ class GoogleDriveExporter:
             logger.error(f"Failed to export sheets as CSV: {e}")
             return False
 
-    def export_document(
-        self, document_id: str, output_name: str | None = None, current_depth: int = 0
-    ) -> dict[str, Path]:
+    def export_document(self, document_id: str, output_name: str | None = None, current_depth: int = 0) -> dict[str, Path]:
         """Export a Google Drive document.
 
         Args:
@@ -885,9 +828,7 @@ class GoogleDriveExporter:
         # Ensure target directory exists
         self.config.target_directory.mkdir(parents=True, exist_ok=True)
 
-        logger.info(
-            f"Exporting '{doc_title}' (ID: {document_id}, type: {doc_type.value}) to {self.config.target_directory}"
-        )
+        logger.info(f"Exporting '{doc_title}' (ID: {document_id}, type: {doc_type.value}) to {self.config.target_directory}")
 
         # Determine formats to export based on document type
         formats_to_export = []
@@ -916,11 +857,7 @@ class GoogleDriveExporter:
 
         # If following links, we need HTML format for link extraction
         # Add it if not already present and we're configured to follow links
-        if (
-            self.config.follow_links
-            and current_depth < self.config.link_depth
-            and "html" not in formats_to_export
-        ):
+        if self.config.follow_links and current_depth < self.config.link_depth and "html" not in formats_to_export:
             formats_to_export.append("html")
             logger.debug("Added HTML format for link extraction")
 
@@ -946,9 +883,7 @@ class GoogleDriveExporter:
 
             # Create filename - always use clean title for primary export
             base_filename = safe_title
-            output_path = (
-                self.config.target_directory / f"{base_filename}.{export_format.extension}"
-            )
+            output_path = self.config.target_directory / f"{base_filename}.{export_format.extension}"
 
             # If file exists, just overwrite it (mirror behavior should update existing files)
             # This handles the common case where we're re-running a mirror operation
@@ -962,14 +897,8 @@ class GoogleDriveExporter:
             self.export_all_sheets_as_csv(document_id, self.config.target_directory, safe_title)
 
         # Process linked documents if requested
-        if (
-            self.config.follow_links
-            and current_depth < self.config.link_depth
-            and "html" in exported_files
-        ):
-            logger.info(
-                f"Searching for linked documents (depth {current_depth + 1}/{self.config.link_depth})"
-            )
+        if self.config.follow_links and current_depth < self.config.link_depth and "html" in exported_files:
+            logger.info(f"Searching for linked documents (depth {current_depth + 1}/{self.config.link_depth})")
             linked_ids = self._extract_links_from_html(exported_files["html"])
 
             if linked_ids:
@@ -982,9 +911,7 @@ class GoogleDriveExporter:
 
         return exported_files
 
-    def get_document_content_as_string(
-        self, document_id: str, format_key: str | None = None
-    ) -> str | None:
+    def get_document_content_as_string(self, document_id: str, format_key: str | None = None) -> str | None:
         """Get document content as a string without saving to disk.
 
         Args:
@@ -1035,9 +962,7 @@ class GoogleDriveExporter:
                 format_key = "md"
 
         if format_key not in export_formats:
-            logger.error(
-                f"Format '{format_key}' not supported for {doc_type.value if doc_type else 'document'} type"
-            )
+            logger.error(f"Format '{format_key}' not supported for {doc_type.value if doc_type else 'document'} type")
             return None
 
         export_format = export_formats[format_key]
@@ -1048,13 +973,9 @@ class GoogleDriveExporter:
                 if doc_type != DocumentType.DOCUMENT:
                     logger.warning(f"Markdown not supported for {doc_type.value}")
                     return None
-                request = self.service.files().export_media(
-                    fileId=document_id, mimeType="text/html"
-                )
+                request = self.service.files().export_media(fileId=document_id, mimeType="text/html")
             else:
-                request = self.service.files().export_media(
-                    fileId=document_id, mimeType=export_format.mime_type
-                )
+                request = self.service.files().export_media(fileId=document_id, mimeType=export_format.mime_type)
 
             fh = io.BytesIO()
             downloader = MediaIoBaseDownload(fh, request)
@@ -1130,9 +1051,7 @@ class GoogleDriveExporter:
         # Process each document with its specific depth setting
         for doc_config in documents:
             try:
-                logger.info(
-                    f"Mirroring '{doc_config.comment or doc_config.document_id}' (depth={doc_config.depth})"
-                )
+                logger.info(f"Mirroring '{doc_config.comment or doc_config.document_id}' (depth={doc_config.depth})")
 
                 # Temporarily override link depth for this specific document
                 original_follow_links = self.config.follow_links

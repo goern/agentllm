@@ -196,6 +196,19 @@ class AgnoCustomLLM(CustomLLM):
                 max_tokens=max_tokens,
             )
             logger.debug("ReleaseManager instantiated successfully")
+        elif agent_name == "rhai-roadmap-publisher":
+            logger.debug("Instantiating RHAI Roadmap Publisher...")
+            from agentllm.agents.rhai_roadmap_publisher import RHAIRoadmapPublisher
+
+            agent = RHAIRoadmapPublisher(
+                shared_db=shared_db,
+                token_storage=token_storage,
+                user_id=effective_user_id,
+                session_id=session_id,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            logger.debug("RHAI Roadmap Publisher instantiated successfully")
         elif agent_name == "demo-agent":
             logger.debug("Instantiating DemoAgent...")
             agent = DemoAgent(

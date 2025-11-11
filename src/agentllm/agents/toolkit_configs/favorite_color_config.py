@@ -32,6 +32,7 @@ class FavoriteColorConfig(BaseToolkitConfig):
         "red",
         "blue",
         "green",
+        "darkseagreen4",
         "yellow",
         "purple",
         "orange",

@@ -25,9 +25,7 @@ class TestSystemPromptExtensionConfigBasics:
         """Test that SystemPromptExtensionConfig accepts token storage."""
         mock_gdrive_config = MagicMock(spec=GoogleDriveConfig)
         mock_token_storage = MagicMock()
-        config = SystemPromptExtensionConfig(
-            gdrive_config=mock_gdrive_config, token_storage=mock_token_storage
-        )
+        config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config, token_storage=mock_token_storage)
         assert config is not None
         assert config.token_storage is mock_token_storage
 
@@ -35,9 +33,7 @@ class TestSystemPromptExtensionConfigBasics:
         """Test that config reads RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL on init."""
         mock_gdrive_config = MagicMock(spec=GoogleDriveConfig)
 
-        with patch.dict(
-            os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}
-        ):
+        with patch.dict(os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}):
             config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config)
             assert config._doc_url == "https://doc.url"
 
@@ -69,9 +65,7 @@ class TestIsConfigured:
         mock_gdrive_config = MagicMock(spec=GoogleDriveConfig)
         mock_gdrive_config.is_configured.return_value = False
 
-        with patch.dict(
-            os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}
-        ):
+        with patch.dict(os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}):
             config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config)
             assert not config.is_configured("user123")
             mock_gdrive_config.is_configured.assert_called_once_with("user123")
@@ -81,9 +75,7 @@ class TestIsConfigured:
         mock_gdrive_config = MagicMock(spec=GoogleDriveConfig)
         mock_gdrive_config.is_configured.return_value = True
 
-        with patch.dict(
-            os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}
-        ):
+        with patch.dict(os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}):
             config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config)
             assert config.is_configured("user123")
             mock_gdrive_config.is_configured.assert_called_once_with("user123")
@@ -167,9 +159,7 @@ class TestGetAgentInstructions:
         mock_gdrive_config = MagicMock(spec=GoogleDriveConfig)
         mock_gdrive_config.is_configured.return_value = False
 
-        with patch.dict(
-            os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}
-        ):
+        with patch.dict(os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}):
             config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config)
 
             result = config.get_agent_instructions("user123")
@@ -185,9 +175,7 @@ class TestGetAgentInstructions:
         mock_toolkit.get_document_content.return_value = "Extended prompt content"
         mock_gdrive_config.get_toolkit.return_value = mock_toolkit
 
-        with patch.dict(
-            os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}
-        ):
+        with patch.dict(os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}):
             config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config)
 
             result = config.get_agent_instructions("user123")
@@ -214,9 +202,7 @@ class TestGetAgentInstructions:
         mock_toolkit.get_document_content.side_effect = ValueError("Document not found")
         mock_gdrive_config.get_toolkit.return_value = mock_toolkit
 
-        with patch.dict(
-            os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}
-        ):
+        with patch.dict(os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}):
             config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config)
 
             with pytest.raises(ValueError, match="Failed to fetch extended system prompt"):
@@ -231,9 +217,7 @@ class TestGetAgentInstructions:
         mock_toolkit.get_document_content.return_value = "Extended prompt content"
         mock_gdrive_config.get_toolkit.return_value = mock_toolkit
 
-        with patch.dict(
-            os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}
-        ):
+        with patch.dict(os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}):
             config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config)
 
             # First call - should fetch
@@ -273,9 +257,7 @@ class TestFetchExtendedSystemPrompt:
         mock_gdrive_config = MagicMock(spec=GoogleDriveConfig)
         mock_gdrive_config.is_configured.return_value = False
 
-        with patch.dict(
-            os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}
-        ):
+        with patch.dict(os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}):
             config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config)
 
             with pytest.raises(ValueError, match="Google Drive is not configured"):
@@ -287,9 +269,7 @@ class TestFetchExtendedSystemPrompt:
         mock_gdrive_config.is_configured.return_value = True
         mock_gdrive_config.get_toolkit.return_value = None
 
-        with patch.dict(
-            os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}
-        ):
+        with patch.dict(os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}):
             config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config)
 
             with pytest.raises(ValueError, match="Failed to get Google Drive toolkit"):
@@ -304,9 +284,7 @@ class TestFetchExtendedSystemPrompt:
         mock_toolkit.get_document_content.return_value = ""
         mock_gdrive_config.get_toolkit.return_value = mock_toolkit
 
-        with patch.dict(
-            os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}
-        ):
+        with patch.dict(os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}):
             config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config)
 
             with pytest.raises(ValueError, match="may be empty or inaccessible"):
@@ -321,9 +299,7 @@ class TestFetchExtendedSystemPrompt:
         mock_toolkit.get_document_content.return_value = "Extended prompt content"
         mock_gdrive_config.get_toolkit.return_value = mock_toolkit
 
-        with patch.dict(
-            os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}
-        ):
+        with patch.dict(os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}):
             config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config)
 
             result = config._fetch_extended_system_prompt("user123")
@@ -372,9 +348,7 @@ class TestInvalidateForGdriveChange:
         ]
         mock_gdrive_config.get_toolkit.return_value = mock_toolkit
 
-        with patch.dict(
-            os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}
-        ):
+        with patch.dict(os.environ, {"RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL": "https://doc.url"}):
             config = SystemPromptExtensionConfig(gdrive_config=mock_gdrive_config)
 
             # First fetch

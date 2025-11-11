@@ -61,9 +61,7 @@ class TestToolkitConfiguration:
                 # Add a required toolkit config (mock JiraConfig as required)
                 with patch.object(JiraConfig, "is_required", return_value=True):
                     with patch.object(JiraConfig, "is_configured", return_value=False):
-                        with patch.object(
-                            JiraConfig, "get_config_prompt", return_value="Please configure JIRA"
-                        ):
+                        with patch.object(JiraConfig, "get_config_prompt", return_value="Please configure JIRA"):
                             # Add the mocked required config
                             agent.toolkit_configs.append(JiraConfig())
 
@@ -71,11 +69,7 @@ class TestToolkitConfiguration:
                             response = agent.run("Hello!", user_id="new-user")
 
                             # Should get config prompt, not agent response
-                            content = (
-                                str(response.content)
-                                if hasattr(response, "content")
-                                else str(response)
-                            )
+                            content = str(response.content) if hasattr(response, "content") else str(response)
                             assert "configure" in content.lower() or "jira" in content.lower()
 
     def test_google_drive_is_required(self):
@@ -103,9 +97,7 @@ class TestToolkitConfiguration:
 
                 # Mock Google Drive API user info
                 mock_service = MagicMock()
-                mock_user_info = {
-                    "user": {"displayName": "Test User", "emailAddress": "test@example.com"}
-                }
+                mock_user_info = {"user": {"displayName": "Test User", "emailAddress": "test@example.com"}}
                 mock_service.about().get().execute.return_value = mock_user_info
                 mock_build.return_value = mock_service
 
@@ -121,12 +113,8 @@ class TestToolkitConfiguration:
                     response = agent.run(url, user_id="test-user")
 
                     # Should get confirmation
-                    content = (
-                        str(response.content) if hasattr(response, "content") else str(response)
-                    )
-                    assert "google drive" in content.lower() or "authorized" in content.lower(), (
-                        f"Failed to extract code from: {url}"
-                    )
+                    content = str(response.content) if hasattr(response, "content") else str(response)
+                    assert "google drive" in content.lower() or "authorized" in content.lower(), f"Failed to extract code from: {url}"
 
                     # Reset for next test
                     gdrive_config = agent.toolkit_configs[0]
@@ -214,9 +202,7 @@ class TestAgentExecution:
                 mock_flow.from_client_config.return_value = mock_flow_instance
 
                 mock_service = MagicMock()
-                mock_service.about().get().execute.return_value = {
-                    "user": {"displayName": "Test", "emailAddress": "test@example.com"}
-                }
+                mock_service.about().get().execute.return_value = {"user": {"displayName": "Test", "emailAddress": "test@example.com"}}
                 mock_build.return_value = mock_service
 
                 # Configure Google Drive
@@ -243,9 +229,7 @@ class TestAgentExecution:
     )
     async def test_async_non_streaming(self, configured_agent):
         """Test async arun() without streaming."""
-        response = await configured_agent.arun(
-            "Hello! Can you help me?", user_id="test-user", stream=False
-        )
+        response = await configured_agent.arun("Hello! Can you help me?", user_id="test-user", stream=False)
 
         assert response is not None
         assert hasattr(response, "content")
@@ -290,9 +274,7 @@ class TestAgentCaching:
                 mock_flow.from_client_config.return_value = mock_flow_instance
 
                 mock_service = MagicMock()
-                mock_service.about().get().execute.return_value = {
-                    "user": {"displayName": "Test", "emailAddress": "test@example.com"}
-                }
+                mock_service.about().get().execute.return_value = {"user": {"displayName": "Test", "emailAddress": "test@example.com"}}
                 mock_build.return_value = mock_service
 
                 # Configure for both users
@@ -329,9 +311,7 @@ class TestAgentCaching:
                 mock_flow.from_client_config.return_value = mock_flow_instance
 
                 mock_service = MagicMock()
-                mock_service.about().get().execute.return_value = {
-                    "user": {"displayName": "Test", "emailAddress": "test@example.com"}
-                }
+                mock_service.about().get().execute.return_value = {"user": {"displayName": "Test", "emailAddress": "test@example.com"}}
                 mock_build.return_value = mock_service
 
                 # Configure Google Drive
@@ -385,9 +365,7 @@ class TestToolkitInstructions:
                 mock_flow.from_client_config.return_value = mock_flow_instance
 
                 mock_service = MagicMock()
-                mock_service.about().get().execute.return_value = {
-                    "user": {"displayName": "Test", "emailAddress": "test@example.com"}
-                }
+                mock_service.about().get().execute.return_value = {"user": {"displayName": "Test", "emailAddress": "test@example.com"}}
                 mock_build.return_value = mock_service
 
                 # Configure Google Drive
@@ -421,9 +399,7 @@ class TestRequiredVsOptionalConfigs:
 
         # All toolkits should be required
         for config in agent.toolkit_configs:
-            assert config.is_required(), (
-                f"{config.__class__.__name__} should be required by default"
-            )
+            assert config.is_required(), f"{config.__class__.__name__} should be required by default"
 
     def test_jira_config_is_required(self):
         """Test that JiraConfig is required (inherits from base)."""

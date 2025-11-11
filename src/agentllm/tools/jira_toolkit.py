@@ -23,9 +23,7 @@ class JiraCommentData(BaseModel):
     author: str = Field(..., description="Comment author display name")
     created: str = Field(..., description="Comment creation timestamp")
     body: str = Field(..., description="Comment body text")
-    pr_urls_found: list[str] = Field(
-        default_factory=list, description="GitHub PR URLs found in comment"
-    )
+    pr_urls_found: list[str] = Field(default_factory=list, description="GitHub PR URLs found in comment")
 
 
 class JiraIssueData(BaseModel):
@@ -42,15 +40,9 @@ class JiraIssueData(BaseModel):
     updated_date: str | None = Field(None, description="Last update timestamp")
     components: list[str] = Field(default_factory=list, description="Affected components")
     labels: list[str] = Field(default_factory=list, description="Ticket labels")
-    pull_requests: list[str] = Field(
-        default_factory=list, description="GitHub PR URLs found in ticket"
-    )
-    comments: list[JiraCommentData] | None = Field(
-        None, description="All ticket comments with PR URLs extracted"
-    )
-    custom_fields: dict[str, Any] | None = Field(
-        None, description="Custom Jira fields like release notes"
-    )
+    pull_requests: list[str] = Field(default_factory=list, description="GitHub PR URLs found in ticket")
+    comments: list[JiraCommentData] | None = Field(None, description="All ticket comments with PR URLs extracted")
+    custom_fields: dict[str, Any] | None = Field(None, description="Custom Jira fields like release notes")
 
 
 def parse_json_to_jira_issue(json_content: str) -> JiraIssueData | None:
@@ -178,9 +170,7 @@ class JiraTools(Toolkit):
             try:
                 if self._username and self._token:
                     logger.debug("Using basic auth (username + token)")
-                    self._jira_client = JIRA(
-                        server=self._server_url, basic_auth=(self._username, self._token)
-                    )
+                    self._jira_client = JIRA(server=self._server_url, basic_auth=(self._username, self._token))
                 else:
                     logger.debug("Using token auth")
                     self._jira_client = JIRA(server=self._server_url, token_auth=self._token)
@@ -233,9 +223,7 @@ class JiraTools(Toolkit):
             "reporter": issue.fields.reporter.displayName if issue.fields.reporter else None,
             "created_date": str(issue.fields.created) if issue.fields.created else None,
             "updated_date": str(issue.fields.updated) if issue.fields.updated else None,
-            "components": [comp.name for comp in issue.fields.components]
-            if issue.fields.components
-            else [],
+            "components": [comp.name for comp in issue.fields.components] if issue.fields.components else [],
             "labels": list(issue.fields.labels) if issue.fields.labels else [],
         }
 
@@ -260,9 +248,7 @@ class JiraTools(Toolkit):
                         # Store comment data using Pydantic model
                         comment_data = JiraCommentData(
                             id=getattr(comment, "id", None),
-                            author=getattr(
-                                getattr(comment, "author", {}), "displayName", "Unknown"
-                            ),
+                            author=getattr(getattr(comment, "author", {}), "displayName", "Unknown"),
                             created=str(getattr(comment, "created", "")),
                             body=comment.body,
                             pr_urls_found=comment_pr_urls,
@@ -270,9 +256,7 @@ class JiraTools(Toolkit):
                         comments_data.append(comment_data)
 
                         if comment_pr_urls:
-                            logger.debug(
-                                f"Found {len(comment_pr_urls)} PR URLs in comment {comment.id}"
-                            )
+                            logger.debug(f"Found {len(comment_pr_urls)} PR URLs in comment {comment.id}")
             else:
                 logger.debug(f"No comments found for {issue.key}")
         except (AttributeError, Exception) as e:
@@ -425,9 +409,7 @@ class JiraTools(Toolkit):
 
             # Search with expanded fields for better data
             logger.debug("Executing JQL search with expanded fields")
-            issues = jira.search_issues(
-                jql_query, maxResults=max_results, expand="renderedFields,changelog"
-            )
+            issues = jira.search_issues(jql_query, maxResults=max_results, expand="renderedFields,changelog")
 
             logger.debug(f"Found {len(issues)} issues matching the query")
 
@@ -443,15 +425,11 @@ class JiraTools(Toolkit):
                     "key": issue.key,
                     "summary": issue.fields.summary,
                     "status": issue.fields.status.name,
-                    "assignee": issue.fields.assignee.displayName
-                    if issue.fields.assignee
-                    else "Unassigned",
+                    "assignee": issue.fields.assignee.displayName if issue.fields.assignee else "Unassigned",
                     "priority": issue.fields.priority.name if issue.fields.priority else "Unknown",
                     "created_date": str(issue.fields.created) if issue.fields.created else None,
                     "updated_date": str(issue.fields.updated) if issue.fields.updated else None,
-                    "components": [comp.name for comp in issue.fields.components]
-                    if issue.fields.components
-                    else [],
+                    "components": [comp.name for comp in issue.fields.components] if issue.fields.components else [],
                     "labels": list(issue.fields.labels) if issue.fields.labels else [],
                 }
 

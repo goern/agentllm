@@ -124,11 +124,7 @@ class TokenStorage:
         """
         try:
             with self.Session() as sess:
-                result = sess.execute(
-                    text(
-                        f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'"
-                    )
-                )
+                result = sess.execute(text(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table_name}'"))
                 return result.fetchone() is not None
         except Exception as e:
             logger.error(f"Error checking if table {table_name} exists: {e}")
@@ -353,9 +349,7 @@ class TokenStorage:
                         "user_id": token_record.user_id,
                         "token": token_record.token[:20] + "...",  # Truncated for security
                         "has_refresh_token": token_record.refresh_token is not None,
-                        "scopes": (
-                            json.loads(token_record.scopes) if token_record.scopes else None
-                        ),
+                        "scopes": (json.loads(token_record.scopes) if token_record.scopes else None),
                         "expiry": token_record.expiry,
                         "created_at": token_record.created_at,
                         "updated_at": token_record.updated_at,

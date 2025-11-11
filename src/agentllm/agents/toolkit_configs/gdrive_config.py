@@ -162,9 +162,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
             )
 
         except Exception as e:
-            logger.error(
-                f"Failed to exchange Google Drive authorization code for user {user_id}: {e}"
-            )
+            logger.error(f"Failed to exchange Google Drive authorization code for user {user_id}: {e}")
             raise ValueError(f"Failed to authorize Google Drive: {str(e)}") from e
 
     def get_config_prompt(self, user_id: str) -> str | None:
@@ -197,9 +195,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
         except ValueError as e:
             # OAuth not configured
             error_msg = (
-                f"❌ {str(e)}\n\n"
-                "Google Drive integration requires OAuth credentials to be configured. "
-                "Please contact your administrator."
+                f"❌ {str(e)}\n\nGoogle Drive integration requires OAuth credentials to be configured. Please contact your administrator."
             )
             return error_msg
 
@@ -268,9 +264,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
         except ValueError as e:
             # OAuth not configured
             error_msg = (
-                f"❌ {str(e)}\n\n"
-                "Google Drive integration requires OAuth credentials to be configured. "
-                "Please contact your administrator."
+                f"❌ {str(e)}\n\nGoogle Drive integration requires OAuth credentials to be configured. Please contact your administrator."
             )
             return error_msg
 
@@ -370,8 +364,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
         """
         if not self._gdrive_client_id or not self._gdrive_client_secret:
             raise ValueError(
-                "Google Drive OAuth is not configured. Please set GDRIVE_CLIENT_ID "
-                "and GDRIVE_CLIENT_SECRET environment variables."
+                "Google Drive OAuth is not configured. Please set GDRIVE_CLIENT_ID and GDRIVE_CLIENT_SECRET environment variables."
             )
 
         # Create OAuth flow
@@ -414,8 +407,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
         """
         if not self._gdrive_client_id or not self._gdrive_client_secret:
             raise ValueError(
-                "Google Drive OAuth is not configured. Please set "
-                "GDRIVE_CLIENT_ID and GDRIVE_CLIENT_SECRET environment variables."
+                "Google Drive OAuth is not configured. Please set GDRIVE_CLIENT_ID and GDRIVE_CLIENT_SECRET environment variables."
             )
 
         try:
@@ -440,9 +432,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
             return flow.credentials
 
         except Exception as e:
-            logger.error(
-                f"Failed to exchange Google Drive authorization code for user {user_id}: {e}"
-            )
+            logger.error(f"Failed to exchange Google Drive authorization code for user {user_id}: {e}")
             raise ValueError(f"Invalid authorization code: {str(e)}") from e
 
     def _get_gdrive_credentials(self, user_id: str) -> Credentials | None:
@@ -472,9 +462,7 @@ class GoogleDriveConfig(BaseToolkitConfig):
                         self.token_storage.upsert_gdrive_token(user_id, creds)
                         logger.info(f"Refreshed Google Drive token for user {user_id}")
                     except Exception as e:
-                        logger.error(
-                            f"Failed to refresh Google Drive token for user {user_id}: {e}"
-                        )
+                        logger.error(f"Failed to refresh Google Drive token for user {user_id}: {e}")
 
                 # Ensure toolkit exists for this user
                 if user_id not in self._gdrive_toolkits:

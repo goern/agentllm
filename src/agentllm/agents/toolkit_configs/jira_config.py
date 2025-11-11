@@ -100,9 +100,7 @@ class JiraConfig(BaseToolkitConfig):
             success, validation_message = toolkit.validate_connection()
 
             if not success:
-                logger.error(
-                    f"Jira token validation failed for user {user_id}: {validation_message}"
-                )
+                logger.error(f"Jira token validation failed for user {user_id}: {validation_message}")
                 raise ValueError(f"Invalid Jira token: {validation_message}")
 
             logger.info(f"Jira token validated successfully for user {user_id}")
@@ -127,9 +125,7 @@ class JiraConfig(BaseToolkitConfig):
 
             # Return confirmation with validation message
             return (
-                f"✅ JIRA configured successfully!\n\n"
-                f"{validation_message}\n\n"
-                f"You can now ask me to search for issues or get issue details."
+                f"✅ JIRA configured successfully!\n\n{validation_message}\n\nYou can now ask me to search for issues or get issue details."
             )
 
         except Exception as e:

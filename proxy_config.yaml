@@ -10,6 +10,14 @@ model_list:
       description: "Release management assistant for software releases, changelogs, and version planning"
       mode: chat
 
+  - model_name: agno/rhai-roadmap-publisher
+    litellm_params:
+      model: agno/rhai-roadmap-publisher
+      custom_llm_provider: agno
+    model_info:
+      description: "RHAI Roadmap Publisher agent for creating and publishing product roadmaps"
+      mode: chat
+
   - model_name: agno/demo-agent
     litellm_params:
       model: agno/demo-agent
@@ -52,9 +60,9 @@ general_settings:
       litellm_user_role: customer
 
 litellm_settings:
-  drop_params: true  # Drop unsupported params instead of erroring
-  set_verbose: false  # Disable verbose logging
-  json_logs: true    # Enable JSON logs for better log aggregation
+  drop_params: true # Drop unsupported params instead of erroring
+  set_verbose: false # Disable verbose logging
+  json_logs: true # Enable JSON logs for better log aggregation
   success_callback: []
   failure_callback: []
   # Register custom Agno provider handler

@@ -51,9 +51,7 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
         if self._doc_url:
             logger.info(f"System prompt extension configured with document: {self._doc_url}")
         else:
-            logger.debug(
-                "System prompt extension not configured (RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL not set)"
-            )
+            logger.debug("System prompt extension not configured (RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL not set)")
 
     def is_configured(self, user_id: str) -> bool:
         """Check if system prompt extension is fully configured for a user.
@@ -163,9 +161,7 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
         """
         # If no document URL configured, nothing to do
         if not self._doc_url:
-            logger.debug(
-                "System prompt extension skipped (no RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL)"
-            )
+            logger.debug("System prompt extension skipped (no RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL)")
             return []
 
         # If Google Drive is not configured for this user, skip silently
@@ -230,23 +226,15 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
 
         # Validate prerequisites
         if not self._doc_url:
-            raise ValueError(
-                "RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL environment variable not set"
-            )
+            raise ValueError("RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL environment variable not set")
 
         if not self._gdrive_config.is_configured(user_id):
-            raise ValueError(
-                f"Google Drive is not configured for user {user_id}. "
-                "Please authorize Google Drive access first."
-            )
+            raise ValueError(f"Google Drive is not configured for user {user_id}. Please authorize Google Drive access first.")
 
         # Get the Google Drive toolkit for this user
         toolkit = self._gdrive_config.get_toolkit(user_id)
         if not toolkit:
-            raise ValueError(
-                f"Failed to get Google Drive toolkit for user {user_id}. "
-                "Please reconfigure Google Drive access."
-            )
+            raise ValueError(f"Failed to get Google Drive toolkit for user {user_id}. Please reconfigure Google Drive access.")
 
         logger.info(f"Fetching extended system prompt from {self._doc_url} for user {user_id}")
 
@@ -255,24 +243,17 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
             content = toolkit.get_document_content(self._doc_url)
 
             if not content:
-                raise ValueError(
-                    f"Failed to fetch content from {self._doc_url}. "
-                    "The document may be empty or inaccessible."
-                )
+                raise ValueError(f"Failed to fetch content from {self._doc_url}. The document may be empty or inaccessible.")
 
             # Cache the content for this user
             self._system_prompts[user_id] = content
-            logger.info(
-                f"Successfully fetched and cached system prompt for user {user_id} ({len(content)} characters)"
-            )
+            logger.info(f"Successfully fetched and cached system prompt for user {user_id} ({len(content)} characters)")
 
             return content
 
         except Exception as e:
             logger.error(f"Error fetching extended system prompt from {self._doc_url}: {e}")
-            raise ValueError(
-                f"Failed to fetch extended system prompt from {self._doc_url}. Error: {str(e)}"
-            ) from e
+            raise ValueError(f"Failed to fetch extended system prompt from {self._doc_url}. Error: {str(e)}") from e
 
     def invalidate_for_gdrive_change(self, user_id: str) -> None:
         """Invalidate cached system prompt when Google Drive credentials change.
@@ -284,10 +265,7 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
             user_id: User identifier
         """
         if user_id in self._system_prompts:
-            logger.info(
-                f"Invalidating cached system prompt for user {user_id} "
-                "due to Google Drive credential change"
-            )
+            logger.info(f"Invalidating cached system prompt for user {user_id} due to Google Drive credential change")
             del self._system_prompts[user_id]
         else:
             logger.debug(f"No cached system prompt to invalidate for user {user_id}")
