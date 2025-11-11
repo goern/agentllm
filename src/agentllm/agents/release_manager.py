@@ -1,11 +1,10 @@
 """Release Manager agent for managing software releases and changelogs."""
 
-import asyncio
 import os
 from pathlib import Path
 from typing import Any
 
-from agno.agent import Agent
+from agno.agent import Agent, RunCompletedEvent
 from agno.db.sqlite import SqliteDb
 from agno.models.google import Gemini
 from loguru import logger
@@ -486,86 +485,68 @@ class ReleaseManager:
 
             logger.info(f"Starting agent.arun() streaming for user {user_id}...")
             chunk_count = 0
-            stream_complete = False
 
             # When streaming, agent.arun() returns an async generator directly
             # Don't await it, just iterate over it
             logger.info("Entering async for loop over agent.arun()...")
 
             # Get the async generator from agent.arun()
-            stream = agent.arun(message, user_id=user_id, **kwargs)
+            # Use stream_events=True to get RunCompletedEvent (not just RunContent events)
+            # Note: stream=True is already in kwargs, so we don't pass it explicitly
+            # Extract session_id from kwargs if present
+            session_id = kwargs.get("session_id")
+
+            stream = agent.arun(
+                message,
+                stream=True,  # Explicit stream mode
+                stream_events=True,  # Get all events, not just RunContent
+                user_id=user_id,
+                session_id=session_id,  # Pass session_id explicitly
+            )
             logger.debug(f"Stream type: {type(stream)}")
 
-            # Timeout for waiting for next chunk (prevents infinite hang)
-            CHUNK_TIMEOUT = 5.0  # 5 seconds between chunks is reasonable
-
+            # Iterate over stream events without timeout
+            # Rely on RunCompletedEvent and StopAsyncIteration for proper completion
             try:
-                while not stream_complete:
-                    try:
-                        # Wait for next chunk with timeout
-                        logger.debug(
-                            f"Waiting for chunk #{chunk_count + 1} (timeout={CHUNK_TIMEOUT}s)..."
-                        )
-                        chunk = await asyncio.wait_for(stream.__anext__(), timeout=CHUNK_TIMEOUT)
-                        chunk_count += 1
+                async for chunk in stream:
+                    chunk_count += 1
 
-                        chunk_type = type(chunk).__name__
-                        chunk_content = getattr(chunk, "content", None)
-                        chunk_event = getattr(chunk, "event", None)
+                    chunk_type = type(chunk).__name__
+                    chunk_content = getattr(chunk, "content", None)
+                    chunk_event = getattr(chunk, "event", None)
 
-                        # Check for various completion signals
-                        is_done = getattr(chunk, "is_done", False)
-                        event_type = getattr(chunk, "event_type", None)
+                    logger.info(
+                        f"Event #{chunk_count}: type={chunk_type}, "
+                        f"event={chunk_event}, "
+                        f"content_length={len(chunk_content) if chunk_content else 0}"
+                    )
 
+                    # Log event attributes for debugging
+                    if hasattr(chunk, "__dict__"):
+                        logger.debug(f"Event #{chunk_count} attributes: {vars(chunk)}")
+                    else:
+                        logger.debug(f"Event #{chunk_count} dir: {dir(chunk)}")
+
+                    # Check for RunCompletedEvent (signals proper stream end)
+                    if isinstance(chunk, RunCompletedEvent):
                         logger.info(
-                            f"Chunk #{chunk_count}: type={chunk_type}, "
-                            f"event={chunk_event}, "
-                            f"event_type={event_type}, "
-                            f"is_done={is_done}, "
-                            f"content_length={len(chunk_content) if chunk_content else 0}"
+                            f"✓ RunCompletedEvent received! Stream completed after {chunk_count} events."
                         )
-
-                        # Log all chunk attributes for deep investigation
-                        if hasattr(chunk, "__dict__"):
-                            logger.debug(f"Chunk #{chunk_count} attributes: {vars(chunk)}")
-                        else:
-                            logger.debug(f"Chunk #{chunk_count} dir: {dir(chunk)}")
-
-                        # Yield the chunk to upstream consumer
-                        yield chunk
-                        logger.debug(f"Chunk #{chunk_count} yielded successfully")
-
-                        # Check for explicit completion signals
-                        if is_done:
-                            logger.info("Stream completion detected via is_done=True")
-                            stream_complete = True
-                            break
-
-                        if chunk_event in ("run_completed", "stream_end", "done"):
-                            logger.info(f"Stream completion detected via event={chunk_event}")
-                            stream_complete = True
-                            break
-
-                    except StopAsyncIteration:
-                        # Natural stream end
-                        logger.info("Stream ended naturally (StopAsyncIteration)")
-                        stream_complete = True
+                        # Don't yield RunCompletedEvent - it's a control signal, not content
                         break
 
-                    except TimeoutError:
-                        # Timeout waiting for next chunk - assume stream is complete
-                        logger.warning(
-                            f"Timeout waiting for chunk #{chunk_count + 1} after {CHUNK_TIMEOUT}s. "
-                            f"Assuming stream is complete. Last chunk was #{chunk_count}"
-                        )
-                        stream_complete = True
-                        break
+                    # Yield the event to upstream consumer
+                    yield chunk
+                    logger.debug(f"Event #{chunk_count} yielded successfully")
 
+                logger.info(f"Stream iteration complete, total events processed: {chunk_count}")
+
+            except StopAsyncIteration:
+                # Natural stream end (should not happen if RunCompletedEvent is sent)
+                logger.info("Stream ended via StopAsyncIteration (no RunCompletedEvent received)")
             except Exception as e:
                 logger.error(f"Error during stream iteration: {e}", exc_info=True)
                 raise
-
-            logger.info(f"Stream iteration complete, total chunks yielded: {chunk_count}")
             logger.info("<<< ReleaseManager._arun_streaming() FINISHED (success)")
             logger.info("=" * 80)
         except Exception as e:
