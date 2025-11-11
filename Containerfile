@@ -16,29 +16,30 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 # Set working directory
 WORKDIR /app
 
-# add the application code
-ADD . /app
+# Layer 1: Copy dependency files and source structure (needed for uv sync)
+COPY pyproject.toml uv.lock README.md ./
+COPY src/ ./src/
 
-# Install dependencies from pyproject.toml (not editable, just deps)
+# Layer 2: Install dependencies (cached until dependencies or source structure change)
 RUN uv sync --locked --no-dev
 
-# Create directories for data persistence
-RUN mkdir -p /app/tmp/gdrive_workspace
+# Layer 3: Copy application configuration (changes occasionally)
+COPY custom_handler.py proxy_config.yaml ./
 
-# Copy application source code
-COPY custom_handler.py /app/
-COPY proxy_config.yaml /app/
+# Layer 4: Copy agentllm package to /app/agentllm for Python imports
+# The stub custom_handler.py imports from agentllm.custom_handler
 COPY src/agentllm /app/agentllm
 
+# Create directories for runtime data persistence
+RUN mkdir -p /app/tmp/gdrive_workspace
+
 # Set Python environment
-ENV PYTHONPATH=/app
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
 
 # Expose LiteLLM proxy port
 EXPOSE 8890
-
-# Place executables in the environment at the front of the path
-ENV PATH="/app/.venv/bin:$PATH"
 
 # Reset the entrypoint, don't invoke `uv`
 ENTRYPOINT []

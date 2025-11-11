@@ -241,17 +241,28 @@ class FavoriteColorConfig(BaseToolkitConfig):
         """
         Get toolkit instance for this configuration.
 
-        This config doesn't provide a toolkit itself, but enables the ColorTools
-        toolkit by providing the favorite color as a dependency.
+        Returns ColorTools configured with the user's favorite color.
 
         Args:
             user_id: User identifier
 
         Returns:
-            None (this config doesn't create a toolkit)
+            ColorTools instance if configured, None otherwise
         """
         logger.debug(f"get_toolkit() called for user_id={user_id}")
-        logger.debug("This config doesn't create a toolkit, returning None")
+
+        if not self.is_configured(user_id):
+            logger.debug(f"User {user_id} not configured, returning None")
+            return None
+
+        favorite_color = self.get_user_color(user_id)
+        if favorite_color:
+            logger.info(f"Creating ColorTools for user {user_id} with color={favorite_color}")
+            from agentllm.tools.color_toolkit import ColorTools
+
+            return ColorTools(favorite_color=favorite_color)
+
+        logger.warning(f"User {user_id} configured but color is None, returning None")
         return None
 
     def check_authorization_request(self, message: str, user_id: str) -> str | None:

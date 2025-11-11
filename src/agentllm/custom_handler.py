@@ -1,6 +1,5 @@
 """Custom LiteLLM handler for Agno provider using dynamic registration."""
 
-import json
 import os
 import sys
 from collections.abc import AsyncIterator, Iterator
@@ -8,18 +7,14 @@ from pathlib import Path
 from typing import Any
 
 import litellm
-from agno.agent import (
-    ReasoningStepEvent,
-    RunContentEvent,
-    ToolCallCompletedEvent,
-    ToolCallStartedEvent,
-)
+from agno.db.sqlite import SqliteDb
 from litellm import CustomLLM
 from litellm.types.utils import Choices, Message, ModelResponse
 from loguru import logger
 
 from agentllm.agents.demo_agent import DemoAgent
 from agentllm.agents.release_manager import ReleaseManager
+from agentllm.db import TokenStorage
 
 # Configure logging for our custom handler using loguru
 # Remove default handler
@@ -44,6 +39,15 @@ logger.add(
     level="INFO",
     format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>",
 )
+
+# Shared database for all agents to enable session management
+DB_PATH = Path(log_dir) / "agno_sessions.db"
+shared_db = SqliteDb(db_file=str(DB_PATH))
+logger.info(f"Initialized shared database at {DB_PATH}")
+
+# Create token storage using the shared database
+token_storage = TokenStorage(agno_db=shared_db)
+logger.info("Initialized token storage")
 
 
 class AgnoCustomLLM(CustomLLM):
@@ -159,10 +163,12 @@ class AgnoCustomLLM(CustomLLM):
         # Extract OpenAI parameters to pass to agent
         temperature = kwargs.get("temperature")
         max_tokens = kwargs.get("max_tokens")
-        logger.debug(f"Agent parameters: temperature={temperature}, max_tokens={max_tokens}")
+        session_id = kwargs.get("session_id")
+        logger.debug(f"Agent parameters: temperature={temperature}, max_tokens={max_tokens}, session_id={session_id}")
 
-        # Build cache key from agent configuration and user_id
-        cache_key = (agent_name, temperature, max_tokens, user_id)
+        # Build cache key from agent configuration, user_id, and session_id
+        # Each user+session combination gets its own wrapper instance
+        cache_key = (agent_name, temperature, max_tokens, user_id, session_id)
 
         # Check if agent exists in cache
         if cache_key in self._agent_cache:
@@ -172,14 +178,33 @@ class AgnoCustomLLM(CustomLLM):
         # Create new agent and cache it
         logger.info(f"✗ Cache MISS - Creating NEW agent for key: {cache_key}")
 
+        # Ensure user_id is not None (default to "unknown" if not provided)
+        effective_user_id = user_id if user_id is not None else "unknown"
+        if user_id is None:
+            logger.warning("user_id is None, using 'unknown' as default")
+
         # Instantiate the agent class based on agent_name
         if agent_name == "release-manager":
             logger.debug("Instantiating ReleaseManager...")
-            agent = ReleaseManager(temperature=temperature, max_tokens=max_tokens)
+            agent = ReleaseManager(
+                shared_db=shared_db,
+                token_storage=token_storage,
+                user_id=effective_user_id,
+                session_id=session_id,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
             logger.debug("ReleaseManager instantiated successfully")
         elif agent_name == "demo-agent":
             logger.debug("Instantiating DemoAgent...")
-            agent = DemoAgent(temperature=temperature, max_tokens=max_tokens)
+            agent = DemoAgent(
+                shared_db=shared_db,
+                token_storage=token_storage,
+                user_id=effective_user_id,
+                session_id=session_id,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
             logger.debug("DemoAgent instantiated successfully")
         else:
             error_msg = f"Agent '{agent_name}' not found. Available agents: 'release-manager', 'demo-agent'"
@@ -429,7 +454,10 @@ class AgnoCustomLLM(CustomLLM):
         custom_llm_provider: str = "agno",
         **kwargs,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Async streaming using Agno's native streaming support.
+        """Async streaming - passes through GenericStreamingChunk dicts from agents.
+
+        Agent wrappers handle all Agno event processing and yield pre-formatted
+        GenericStreamingChunk dictionaries. This method is now provider-agnostic.
 
         Args:
             model: Model name
@@ -456,156 +484,16 @@ class AgnoCustomLLM(CustomLLM):
         agent = self._get_agent(model, user_id=user_id, **kwargs)
 
         logger.info(f"Starting async streaming with session_id={session_id}, user_id={user_id}")
-        # Use Agno's real async streaming with session management
+
+        # Agent.arun() yields GenericStreamingChunk dicts directly
+        # Just pass them through to LiteLLM
         chunk_count = 0
-
-        logger.info("Calling agent.arun() with stream=True...")
-        stream = agent.arun(user_message, stream=True, session_id=session_id, user_id=user_id)
-        logger.debug(f"agent.arun() returned stream type: {type(stream)}")
-
-        logger.info("Entering async for loop over agent stream...")
-        async for chunk in stream:
+        async for chunk_dict in agent.arun(user_message, stream=True, session_id=session_id, user_id=user_id):
             chunk_count += 1
-            chunk_type = type(chunk).__name__
+            logger.debug(f"[custom_handler] Passing through chunk #{chunk_count} to LiteLLM")
+            yield chunk_dict
 
-            logger.debug(f"[custom_handler] Received event #{chunk_count} from agent: type={chunk_type}")
-
-            # Process different event types
-            if isinstance(chunk, RunContentEvent):
-                # Extract content from chunk
-                content = chunk.content if hasattr(chunk, "content") else str(chunk)
-
-                if not content:
-                    logger.debug(f"Skipping empty RunContentEvent #{chunk_count}")
-                    continue
-
-                logger.debug(f"Yielding RunContentEvent #{chunk_count} to LiteLLM, content_length={len(content)}")
-
-                # Yield GenericStreamingChunk format
-                yield {
-                    "text": content,
-                    "finish_reason": None,
-                    "index": 0,
-                    "is_finished": False,
-                    "tool_use": None,
-                    "usage": {
-                        "completion_tokens": 0,
-                        "prompt_tokens": 0,
-                        "total_tokens": 0,
-                    },
-                }
-                logger.debug(f"RunContentEvent #{chunk_count} yielded to LiteLLM successfully")
-
-            elif isinstance(chunk, ToolCallStartedEvent):
-                # Tool call is starting - send formatted text (similar to Gemini reasoning format)
-                if hasattr(chunk, "tool") and chunk.tool:
-                    tool = chunk.tool
-                    tool_name = tool.tool_name if hasattr(tool, "tool_name") else "unknown"
-                    tool_args = tool.tool_args if hasattr(tool, "tool_args") else {}
-
-                    logger.info(f"🔧 ToolCallStartedEvent #{chunk_count}: {tool_name}({json.dumps(tool_args)})")
-
-                    # Format tool call as visible text (similar to Gemini's reasoning blocks)
-                    args_json = json.dumps(tool_args, indent=2) if tool_args else "{}"
-                    tool_call_text = f'\n<details type="tool_call" open="true">\n<summary>🔧 Tool: {tool_name}</summary>\n\n```json\n{args_json}\n```\n\n'
-
-                    yield {
-                        "text": tool_call_text,
-                        "finish_reason": None,
-                        "index": 0,
-                        "is_finished": False,
-                        "tool_use": None,
-                        "usage": {
-                            "completion_tokens": 0,
-                            "prompt_tokens": 0,
-                            "total_tokens": 0,
-                        },
-                    }
-                    logger.debug(f"ToolCallStartedEvent #{chunk_count} yielded to LiteLLM")
-                else:
-                    logger.warning(f"ToolCallStartedEvent #{chunk_count} has no tool attribute, skipping")
-
-            elif isinstance(chunk, ToolCallCompletedEvent):
-                # Tool call completed - show result and close the details block
-                if hasattr(chunk, "tool") and chunk.tool:
-                    tool = chunk.tool
-                    tool_name = tool.tool_name if hasattr(tool, "tool_name") else "unknown"
-                    tool_result = tool.result if hasattr(tool, "result") else "No result"
-
-                    logger.info(f"✅ ToolCallCompletedEvent #{chunk_count}: {tool_name} → {str(tool_result)[:100]}")
-
-                    # Include the tool result in the details block
-                    completion_text = f"**Result:**\n\n{tool_result}\n\n✅ Completed\n</details>\n\n"
-
-                    yield {
-                        "text": completion_text,
-                        "finish_reason": None,
-                        "index": 0,
-                        "is_finished": False,
-                        "tool_use": None,
-                        "usage": {
-                            "completion_tokens": 0,
-                            "prompt_tokens": 0,
-                            "total_tokens": 0,
-                        },
-                    }
-                    logger.debug(f"ToolCallCompletedEvent #{chunk_count} yielded to LiteLLM")
-                else:
-                    logger.warning(f"ToolCallCompletedEvent #{chunk_count} has no tool attribute, skipping")
-
-            elif isinstance(chunk, ReasoningStepEvent):
-                # Reasoning step - format similar to Gemini's reasoning blocks
-                reasoning_text = (
-                    chunk.reasoning_content
-                    if hasattr(chunk, "reasoning_content")
-                    else str(chunk.content)
-                    if hasattr(chunk, "content")
-                    else ""
-                )
-
-                if reasoning_text:
-                    logger.info(f"💭 ReasoningStepEvent #{chunk_count}: {reasoning_text[:100]}")
-
-                    # Format as collapsible details block (similar to Gemini)
-                    reasoning_block = (
-                        f'\n<details type="reasoning">\n<summary>💭 Reasoning Step</summary>\n\n{reasoning_text}\n\n</details>\n\n'
-                    )
-
-                    yield {
-                        "text": reasoning_block,
-                        "finish_reason": None,
-                        "index": 0,
-                        "is_finished": False,
-                        "tool_use": None,
-                        "usage": {
-                            "completion_tokens": 0,
-                            "prompt_tokens": 0,
-                            "total_tokens": 0,
-                        },
-                    }
-                    logger.debug(f"ReasoningStepEvent #{chunk_count} yielded to LiteLLM")
-                else:
-                    logger.debug(f"ReasoningStepEvent #{chunk_count} has no content, skipping")
-
-            else:
-                # Log other events for debugging (e.g., RunStartedEvent, etc.)
-                logger.debug(f"Received event: {chunk_type} (not yielding to LiteLLM)")
-
-        logger.info(f"async for loop over ReleaseManager stream completed, total chunks: {chunk_count}")
-        logger.info("Sending final chunk with finish_reason=stop")
-        # Send final chunk with finish_reason
-        yield {
-            "text": "",
-            "finish_reason": "stop",
-            "index": 0,
-            "is_finished": True,
-            "tool_use": None,
-            "usage": {
-                "completion_tokens": chunk_count,
-                "prompt_tokens": 0,
-                "total_tokens": chunk_count,
-            },
-        }
+        logger.info(f"Stream completed, total chunks: {chunk_count}")
         logger.info(f"<<< astreaming() FINISHED - model={model}")
         logger.info("=" * 80)
 
