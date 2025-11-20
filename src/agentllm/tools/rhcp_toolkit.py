@@ -1,5 +1,8 @@
 """
 Red Hat Customer Portal (RHCP) toolkit for accessing customer case information.
+
+IMPORTANT: This toolkit is READ-ONLY. It does not provide any methods to create,
+update, or modify customer cases. All operations are strictly read/query only.
 """
 
 import time
@@ -30,7 +33,11 @@ class RHCPCaseData(BaseModel):
 
 
 class RHCPTools(Toolkit):
-    """Toolkit for interacting with Red Hat Customer Portal API."""
+    """Toolkit for interacting with Red Hat Customer Portal API.
+
+    READ-ONLY ACCESS: This toolkit only provides read access to customer cases.
+    No case creation, modification, or update operations are available.
+    """
 
     def __init__(
         self,
@@ -40,6 +47,8 @@ class RHCPTools(Toolkit):
         **kwargs,
     ):
         """Initialize RHCP toolkit with offline token.
+
+        NOTE: This toolkit is READ-ONLY and does not support case updates.
 
         Args:
             offline_token: RHCP offline token for obtaining access tokens

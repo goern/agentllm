@@ -23,9 +23,16 @@ class RHDHSupport(BaseAgentWrapper):
     Toolkit Configuration:
     ---------------------
     - Google Drive: OAuth-based access to process documentation (required)
-    - JIRA: API token-based access to RHDHSUPP, RHDHPLAN, RHDHBUGS (read-only, optional)
-    - RHCP: Offline token-based access to Red Hat Customer Portal cases (optional)
+    - JIRA: API token-based access to RHDHSUPP, RHDHPLAN, RHDHBUGS (READ-ONLY, optional)
+    - RHCP: Offline token-based access to Red Hat Customer Portal cases (READ-ONLY, optional)
     - SystemPromptExtension: Extended instructions from Google Drive document (required if configured)
+
+    IMPORTANT - READ-ONLY Operations:
+    ---------------------------------
+    This agent has READ-ONLY access to both JIRA and RHCP. It cannot:
+    - Create, update, or comment on JIRA issues
+    - Create, update, or modify customer cases in RHCP
+    All operations are strictly query/read only for safety.
 
     The agent helps with:
     - Monitoring RHDHSUPP issues requiring Engineering assistance

@@ -1,4 +1,8 @@
-"""Red Hat Customer Portal (RHCP) configuration manager."""
+"""Red Hat Customer Portal (RHCP) configuration manager.
+
+IMPORTANT: This configuration provides READ-ONLY access to RHCP.
+The toolkit does not support creating, updating, or modifying customer cases.
+"""
 
 import re
 
@@ -16,6 +20,10 @@ class RHCPConfig(BaseToolkitConfig):
     - RHCP offline token extraction from messages
     - RHCP connection validation
     - Per-user RHCP toolkit creation and management
+
+    READ-ONLY ACCESS:
+        This configuration provides read-only access to customer cases.
+        No case creation, updates, or modifications are supported.
 
     Setup:
         Users provide their RHCP offline token through chat messages.
