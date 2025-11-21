@@ -506,7 +506,6 @@ class TestCompletenessEvaluation:
         # Score should be 100 for identical outputs
         assert score >= 95.0, f"Completeness score {score} below threshold 95.0 (expected 100 for identical outputs)"
 
-
     def test_basic_scenario_completeness_with_agent(
         self,
         rhai_agent,
@@ -552,9 +551,7 @@ class TestCompletenessEvaluation:
                 )
 
                 # Assert score threshold
-                assert (
-                    score >= 95.0
-                ), f"Completeness score {score} below threshold 95.0"
+                assert score >= 95.0, f"Completeness score {score} below threshold 95.0"
 
 
 @pytest.mark.integration
@@ -600,9 +597,7 @@ class TestAccuracyEvaluation:
                 )
 
                 # Assert score threshold
-                assert (
-                    score >= 95.0
-                ), f"Accuracy score {score} below threshold 95.0"
+                assert score >= 95.0, f"Accuracy score {score} below threshold 95.0"
 
 
 @pytest.mark.integration
@@ -648,9 +643,7 @@ class TestStructureEvaluation:
                 )
 
                 # Assert score threshold
-                assert (
-                    score >= 95.0
-                ), f"Structure score {score} below threshold 95.0"
+                assert score >= 95.0, f"Structure score {score} below threshold 95.0"
 
 
 @pytest.mark.integration
@@ -696,6 +689,4 @@ class TestContentEvaluation:
                 )
 
                 # Assert score threshold
-                assert (
-                    score >= 95.0
-                ), f"Content score {score} below threshold 95.0"
+                assert score >= 95.0, f"Content score {score} below threshold 95.0"

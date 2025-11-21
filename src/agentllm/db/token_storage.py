@@ -75,6 +75,18 @@ class GitHubToken(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class RHCPToken(Base):
+    """Table for storing Red Hat Customer Portal offline tokens."""
+
+    __tablename__ = "rhcp_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, nullable=False, unique=True, index=True)
+    offline_token = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class FavoriteColor(Base):
     """Table for storing user favorite colors (demo agent)."""
 
@@ -518,6 +530,101 @@ class TokenStorage:
             logger.error(f"Error deleting GitHub token for user {user_id}: {e}")
             return False
 
+    # RHCP Token Operations
+
+    def upsert_rhcp_token(
+        self,
+        user_id: str,
+        offline_token: str,
+    ) -> bool:
+        """Store or update Red Hat Customer Portal offline token for a user.
+
+        Args:
+            user_id: Unique user identifier
+            offline_token: RHCP offline token for obtaining access tokens
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self.Session() as sess:
+                # Check if token exists
+                existing = sess.query(RHCPToken).filter_by(user_id=user_id).first()
+
+                if existing:
+                    # Update existing token
+                    existing.offline_token = offline_token
+                    existing.updated_at = datetime.utcnow()
+                    logger.debug(f"Updating RHCP token for user {user_id}")
+                else:
+                    # Insert new token
+                    new_token = RHCPToken(
+                        user_id=user_id,
+                        offline_token=offline_token,
+                    )
+                    sess.add(new_token)
+                    logger.debug(f"Inserting new RHCP token for user {user_id}")
+
+                sess.commit()
+                return True
+
+        except Exception as e:
+            logger.error(f"Error upserting RHCP token for user {user_id}: {e}")
+            return False
+
+    def get_rhcp_token(self, user_id: str) -> dict[str, Any] | None:
+        """Retrieve RHCP offline token for a user.
+
+        Args:
+            user_id: Unique user identifier
+
+        Returns:
+            Dictionary with token data, or None if not found
+        """
+        try:
+            with self.Session() as sess:
+                token_record = sess.query(RHCPToken).filter_by(user_id=user_id).first()
+
+                if token_record:
+                    return {
+                        "user_id": token_record.user_id,
+                        "offline_token": token_record.offline_token,
+                        "created_at": token_record.created_at,
+                        "updated_at": token_record.updated_at,
+                    }
+
+                return None
+
+        except Exception as e:
+            logger.error(f"Error retrieving RHCP token for user {user_id}: {e}")
+            return None
+
+    def delete_rhcp_token(self, user_id: str) -> bool:
+        """Delete RHCP token for a user.
+
+        Args:
+            user_id: Unique user identifier
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            with self.Session() as sess:
+                token_record = sess.query(RHCPToken).filter_by(user_id=user_id).first()
+
+                if token_record:
+                    sess.delete(token_record)
+                    sess.commit()
+                    logger.debug(f"Deleted RHCP token for user {user_id}")
+                    return True
+
+                logger.warning(f"No RHCP token found for user {user_id}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error deleting RHCP token for user {user_id}: {e}")
+            return False
+
     # Favorite Color Operations
 
     def upsert_favorite_color(self, user_id: str, color: str) -> bool:
@@ -651,6 +758,21 @@ class TokenStorage:
 
         except Exception as e:
             logger.error(f"Error listing users with GitHub tokens: {e}")
+            return []
+
+    def list_users_with_rhcp_tokens(self) -> list[str]:
+        """Get list of all user IDs with stored RHCP tokens.
+
+        Returns:
+            List of user IDs
+        """
+        try:
+            with self.Session() as sess:
+                results = sess.query(RHCPToken.user_id).all()
+                return [r[0] for r in results]
+
+        except Exception as e:
+            logger.error(f"Error listing users with RHCP tokens: {e}")
             return []
 
     def close(self):

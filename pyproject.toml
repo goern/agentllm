@@ -11,6 +11,8 @@ dependencies = [
   "html-to-markdown>=1.0.0",
   "anthropic>=0.72.1",
   "rich>=13.7.1",
+  "requests>=2.32.0",
+  "beautifulsoup4>=4.12.0",
   "lancedb>=0.17.0",
   "tantivy>=0.22.0",
   "pypdf>=5.1.0",
@@ -29,6 +31,7 @@ demo-agent = "agentllm.agents.demo_agent:DemoAgentFactory"
 release-manager = "agentllm.agents.release_manager:ReleaseManagerFactory"
 rhai-roadmap-publisher = "agentllm.agents.rhai_roadmap_publisher:RHAIRoadmapPublisherFactory"
 github-pr-prioritization = "agentllm.agents.github_pr_prioritization_agent:GitHubReviewAgentFactory"
+rhdh-support = "agentllm.agents.rhdh_support:RHDHSupportFactory"
 
 [build-system]
 build-backend = "hatchling.build"

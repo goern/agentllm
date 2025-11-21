@@ -16,8 +16,8 @@ logger = logging.getLogger(__name__)
 class SystemPromptExtensionConfig(BaseToolkitConfig):
     """Configuration manager for extending agent system prompts from Google Drive documents.
 
-    This config fetches extended system instructions from a Google Drive document
-    specified by the RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL environment variable.
+    This config fetches extended system instructions from a Google Drive document.
+    The document URL can be provided via constructor parameter or environment variable.
 
     Dependencies:
         - Requires GoogleDriveConfig to be configured for the user
@@ -25,8 +25,8 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
 
     Behavior:
         - Required toolkit (is_required() returns True)
-        - Silent if env var not set or GDrive not configured
-        - Fails agent creation if env var set, GDrive configured, but fetch fails
+        - Silent if document URL not provided or GDrive not configured
+        - Fails agent creation if URL provided, GDrive configured, but fetch fails
         - Caches fetched prompts per user
         - Invalidates cache when GDrive credentials change
     """
@@ -34,30 +34,47 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
     def __init__(
         self,
         gdrive_config: "GoogleDriveConfig",
+        document_url: str | None = None,
+        env_var_name: str | None = None,
         token_storage: "TokenStorage | None" = None,
     ):
         """Initialize system prompt extension configuration.
 
         Args:
             gdrive_config: GoogleDriveConfig instance to use for fetching documents
+            document_url: Google Drive document URL to fetch system prompt from.
+                         If None, will check env_var_name environment variable.
+            env_var_name: Environment variable name to read document URL from.
+                         Required if document_url is None.
             token_storage: Optional shared token storage (for consistency with base class)
         """
         super().__init__(token_storage)
         self._gdrive_config = gdrive_config
-        self._doc_url = os.getenv("RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL")
+
+        # Determine document URL from: parameter > env var
+        if document_url:
+            self._doc_url = document_url
+            self._source = "constructor parameter"
+        elif env_var_name:
+            self._doc_url = os.getenv(env_var_name)
+            self._source = f"environment variable {env_var_name}"
+        else:
+            self._doc_url = None
+            self._source = "not configured (no document_url or env_var_name provided)"
+
         # Per-user cache of fetched system prompts
         self._system_prompts: dict[str, str] = {}
 
         if self._doc_url:
-            logger.info(f"System prompt extension configured with document: {self._doc_url}")
+            logger.info(f"System prompt extension configured with document: {self._doc_url} (from {self._source})")
         else:
-            logger.debug("System prompt extension not configured (RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL not set)")
+            logger.debug(f"System prompt extension not configured ({self._source})")
 
     def is_configured(self, user_id: str) -> bool:
         """Check if system prompt extension is fully configured for a user.
 
         Returns True if:
-        - Environment variable RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL is set, AND
+        - A document URL is available (from constructor or environment), AND
         - Google Drive is configured for this user
 
         Args:
@@ -161,7 +178,7 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
         """
         # If no document URL configured, nothing to do
         if not self._doc_url:
-            logger.debug("System prompt extension skipped (no RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL)")
+            logger.debug(f"System prompt extension skipped (no document URL from {self._source})")
             return []
 
         # If Google Drive is not configured for this user, skip silently
@@ -169,7 +186,7 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
         if not self._gdrive_config.is_configured(user_id):
             logger.info(
                 f"System prompt extension skipped for user {user_id}: "
-                "RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL is set but Google Drive not configured"
+                f"document URL is set but Google Drive not configured"
             )
             return []
 
@@ -226,7 +243,7 @@ class SystemPromptExtensionConfig(BaseToolkitConfig):
 
         # Validate prerequisites
         if not self._doc_url:
-            raise ValueError("RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL environment variable not set")
+            raise ValueError(f"System prompt document URL not configured (checked {self._source})")
 
         if not self._gdrive_config.is_configured(user_id):
             raise ValueError(f"Google Drive is not configured for user {user_id}. Please authorize Google Drive access first.")

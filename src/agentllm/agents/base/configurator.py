@@ -405,13 +405,20 @@ class AgentConfigurator(ABC):
         toolkits = []
 
         for config in self.toolkit_configs:
-            if config.is_configured(self.user_id):
+            config_name = config.__class__.__name__
+            is_configured = config.is_configured(self.user_id)
+            logger.info(f"  {config_name}: is_configured={is_configured}")
+
+            if is_configured:
                 toolkit = config.get_toolkit(self.user_id)
                 if toolkit:
                     toolkits.append(toolkit)
-                    logger.debug(f"Added toolkit from {config.__class__.__name__}")
+                    toolkit_name = toolkit.name if hasattr(toolkit, "name") else type(toolkit).__name__
+                    logger.info(f"  ✅ Added toolkit: {toolkit_name} from {config_name}")
+                else:
+                    logger.warning(f"  ⚠️ {config_name} is configured but get_toolkit() returned None!")
 
-        logger.info(f"Collected {len(toolkits)} toolkit(s)")
+        logger.info(f"🎯 Collected {len(toolkits)} toolkit(s) total")
         return toolkits
 
     def _build_complete_instructions(self) -> list[str]:

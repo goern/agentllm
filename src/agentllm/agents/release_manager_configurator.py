@@ -80,7 +80,11 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         # ORDER MATTERS: SystemPromptExtensionConfig depends on GoogleDriveConfig
         gdrive_config = GoogleDriveConfig(token_storage=self._token_storage)
         jira_config = JiraConfig(token_storage=self._token_storage)
-        system_prompt_config = SystemPromptExtensionConfig(gdrive_config=gdrive_config, token_storage=self._token_storage)
+        system_prompt_config = SystemPromptExtensionConfig(
+            gdrive_config=gdrive_config,
+            env_var_name="RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL",
+            token_storage=self._token_storage,
+        )
 
         return [
             gdrive_config,

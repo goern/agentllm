@@ -34,6 +34,14 @@ model_list:
       description: "GitHub PR Prioritization - Multi-factor scoring and intelligent review queue management"
       mode: chat
 
+  - model_name: agno/rhdh-support
+    litellm_params:
+      model: agno/rhdh-support
+      custom_llm_provider: agno
+    model_info:
+      description: "RHDH Support Focal - Monitoring support issues, customer cases, and team assignments"
+      mode: chat
+
   # Google Gemini 2.5 models
   - model_name: gemini-2.5-pro
     litellm_params:
