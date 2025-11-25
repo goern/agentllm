@@ -78,7 +78,7 @@ class ReleaseManagerConfigurator(AgentConfigurator):
         https://ai.google.dev/gemini-api/docs/models/gemini
 
         Returns:
-            str: Model ID (gemini-3-pro-preview for Gemini 3)
+            str: Model ID (gemini-2.5-pro for Gemini 2.5)
         """
         return "gemini-2.5-pro"
 
