@@ -6,30 +6,24 @@ This file provides guidance to Claude Code when working with this repository.
 
 AgentLLM: LiteLLM custom provider exposing Agno agents via OpenAI-compatible API.
 
-Architecture: `[Client] -> [LiteLLM Proxy :8890] -> [Agno Provider] -> [Agno Agent] -> [Gemini API]`
+Architecture: `[Client] -> [LiteLLM Proxy :9501 (external) / :8890 (internal)] -> [Agno Provider] -> [Agno Agent] -> [Gemini API]`
 
 ## Common Commands
 
 ```bash
 # Testing
-nox -s test                                    # Unit tests
-nox -s integration                             # Integration tests (needs running proxy)
-uv run pytest tests/test_custom_handler.py -v  # Specific test (-v auto-enables AGNO_DEBUG)
+pytest tests/                                  # Run all tests
+pytest tests/test_custom_handler.py -v         # Specific test (-v auto-enables AGNO_DEBUG)
 pytest tests/ -v -s                            # Verbose + show output (AGNO_DEBUG=true)
-pytest tests/                                  # Quiet mode (AGNO_DEBUG not set)
 
 # Development (most common)
-nox -s proxy                                   # Terminal 1: local proxy with hot reload
-nox -s dev_local_proxy                         # Terminal 2: OpenWebUI container
-
-# Full container stack
-nox -s dev                                     # Quick start (reuses images)
-nox -s dev_build                               # Force rebuild
-nox -s dev_logs                                # View logs
+just dev                                       # Full container stack with hot reload
+just dev-restart                               # Restart after code changes
+just dev-logs                                  # View logs
 
 # Code quality
-nox -s format                                  # Format
-make lint                                      # Lint
+just format                                    # Format code
+just lint                                      # Run linting
 ```
 
 ## Critical Architecture Patterns
@@ -95,6 +89,56 @@ project_root/
 ```
 
 **Why:** `custom_handler.agno_handler` in config → LiteLLM looks for `./custom_handler.py` → stub imports from `agentllm.custom_handler`
+
+### Generic Token Storage (NEW!)
+
+**No more modifying TokenStorage for new agents!** Use the generic token API:
+
+```python
+# Store any token type
+token_storage.upsert_token(
+    "my-service",
+    user_id,
+    api_key="key-123",
+    api_secret="secret-456",
+    endpoint="https://api.example.com"
+)
+
+# Retrieve any token type
+token_data = token_storage.get_token("my-service", user_id)
+# Returns: {"api_key": "key-123", "api_secret": "secret-456", "endpoint": "..."}
+
+# Delete any token type
+token_storage.delete_token("my-service", user_id)
+```
+
+**Adding a new token type** (just register it once, no code changes to TokenStorage):
+
+1. Define SQLAlchemy model in `token_storage.py`:
+   ```python
+   class MyServiceToken(Base):
+       __tablename__ = "my_service_tokens"
+       id = Column(Integer, primary_key=True, autoincrement=True)
+       user_id = Column(String, nullable=False, unique=True, index=True)
+       api_key = Column(String, nullable=False)
+       api_secret = Column(String, nullable=False)
+       endpoint = Column(String, nullable=False)
+       created_at = Column(DateTime, default=datetime.utcnow)
+       updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+   ```
+
+2. Register in `TokenStorage._initialize_registry()`:
+   ```python
+   registry.register(
+       "my-service",
+       TokenTypeConfig(
+           model=MyServiceToken,
+           encrypted_fields=["api_key", "api_secret"],  # Auto-encrypted!
+       ),
+   )
+   ```
+
+That's it! Now use `upsert_token("my-service", ...)` everywhere. No need for `upsert_myservice_token()` methods.
 
 ### Toolkit Configuration System
 
@@ -459,10 +503,10 @@ See `.env.secrets.template` for full config.
 
 1. Write failing test
 2. Implement feature
-3. `nox -s test`
+3. `pytest tests/`
 4. Refactor
 
-Always use `uv run` for Python commands.
+Always use `uv run` for Python commands (or just use `pytest` directly).
 
 ### Debugging Tests
 

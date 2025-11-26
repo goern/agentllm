@@ -249,7 +249,7 @@ nox -s dev_stop
 nox -s dev_build
 
 # Test with curl
-curl -X POST http://localhost:8890/v1/chat/completions \
+curl -X POST http://localhost:9501/v1/chat/completions \
   -H "Authorization: Bearer sk-agno-test-key-12345" \
   -H "Content-Type: application/json" \
   -d '{
@@ -626,7 +626,7 @@ def test_agent_via_proxy():
     import requests
 
     response = requests.post(
-        "http://localhost:8890/v1/chat/completions",
+        "http://localhost:9501/v1/chat/completions",
         headers={
             "Authorization": "Bearer sk-agno-test-key-12345",
             "Content-Type": "application/json"
@@ -649,7 +649,7 @@ def test_agent_via_proxy():
 nox -s proxy
 
 # Test with curl
-curl -X POST http://localhost:8890/v1/chat/completions \
+curl -X POST http://localhost:9501/v1/chat/completions \
   -H "Authorization: Bearer sk-agno-test-key-12345" \
   -H "Content-Type: application/json" \
   -d '{
@@ -734,7 +734,7 @@ class MyAgent(BaseAgentWrapper):
 The `shared_db` is created and passed by `custom_handler.py`:
 ```python
 # In custom_handler.py
-DB_PATH = Path("tmp/agno_sessions.db")
+DB_PATH = Path("tmp/agent-data/agno_sessions.db")
 shared_db = SqliteDb(db_file=str(DB_PATH))
 
 agent = MyAgent(shared_db=shared_db, ...)  # Injected here

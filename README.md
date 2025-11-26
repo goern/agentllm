@@ -17,13 +17,19 @@ cd agentllm
 
 # 2. Configure environment
 cp .env.secrets.template .env.secrets
-# Edit .env.secrets and add your GEMINI_API_KEY (get from https://aistudio.google.com/apikey)
+# Edit .env.secrets and add:
+# - GEMINI_API_KEY (get from https://aistudio.google.com/apikey)
+# - AGENTLLM_TOKEN_ENCRYPTION_KEY (generate with command below)
+
+# Generate encryption key for token storage
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Copy the output and add to .env.secrets as AGENTLLM_TOKEN_ENCRYPTION_KEY
 
 # 3. Start everything (easiest way!)
 podman compose up
 ```
 
-**Access Open WebUI:** <http://localhost:3000>
+**Access Open WebUI:** <http://localhost:9500>
 
 **Available Agents:**
 - `agno/release-manager` - RHDH release management assistant
@@ -31,6 +37,47 @@ podman compose up
 - `agno/demo-agent` - Example agent with color tools
 
 > **Note:** Agent data (session history, credentials) is stored in the `tmp/` directory, which persists across restarts.
+
+### Development Quick Start
+
+For development with hot reload (code changes reflected instantly):
+
+```bash
+# Install just command runner (one-time setup)
+brew install just  # macOS
+# or see https://github.com/casey/just#installation for other platforms
+
+# Start development environment with source code mounted
+just dev
+
+# After making code changes, restart to pick them up (no rebuild needed!)
+just dev-restart
+
+# View all available commands
+just
+```
+
+The `just dev` command uses a development overlay that mounts your source code into containers, enabling hot reload without rebuilding images.
+
+## Security: Token Encryption
+
+AgentLLM encrypts all sensitive tokens (Jira, GitHub, Google Drive, RHCP) at rest using industry-standard Fernet encryption. You **must** set an encryption key:
+
+```bash
+# Generate a new key
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# Add to .env.secrets
+echo "AGENTLLM_TOKEN_ENCRYPTION_KEY=<your-generated-key>" >> .env.secrets
+```
+
+**Important:**
+- The application will fail to start without an encryption key
+- Keep your key secure and backed up
+- If you lose the key, all stored tokens become unrecoverable (users must re-enter)
+- Use different keys for development and production
+
+📖 **For production deployment**, see [docs/deployment-encryption.md](docs/deployment-encryption.md)
 
 ## Architecture
 
@@ -65,7 +112,7 @@ See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
 
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) package manager ([install](https://docs.astral.sh/uv/getting-started/installation/): `curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- [nox](https://nox.thea.codes/) task automation ([install](https://nox.thea.codes/en/stable/tutorial.html#installation): `uv tool install nox`)
+- [just](https://just.systems/) command runner ([install](https://github.com/casey/just#installation): `brew install just` on macOS)
 - [Podman](https://podman.io/) ([install](https://podman.io/getting-started/installation))
 - Google Gemini API key ([get here](https://aistudio.google.com/apikey))
 
@@ -73,51 +120,81 @@ See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
 
 **Choose based on your workflow:**
 
-| Mode | Command | Use When | Proxy | OpenWebUI |
-|------|---------|----------|-------|-----------|
-| **Quick Start** ⭐ | `podman compose up` | **Easiest way** - just running the system | Container | Container |
-| **Full Container** | `nox -s dev` or `nox -s dev_build` | Need to rebuild after code changes | Container | Container |
-| **Development** | Terminal 1: `nox -s proxy`<br>Terminal 2: `nox -s dev_local_proxy` | Modifying agent code (hot reload) | Local (hot reload) | Container |
+| Mode | Command | Use When | Proxy | OAuth | Hot Reload |
+|------|---------|----------|-------|-------|------------|
+| **Quick Start** ⭐ | `podman compose up` | **Easiest** - just running the system | Container | - | ❌ |
+| **Containerized Dev** | `just dev` | Development with hot reload | Container | Container | ✅ |
+| **Local Services** | Terminal 1: `just proxy`<br>Terminal 2: `just oauth-callback` | Maximum flexibility | Local | Local | ✅ |
 
 **Notes:**
-- `podman compose up` is the simplest way to get started - no Python/uv/nox required!
-- Use `nox -s dev` for quick starts (reuses existing images), or `nox -s dev_build` when you need to rebuild after code changes
+- `just dev` uses a dev overlay (`compose.dev.yaml`) that mounts your source code for hot reload
+- After code changes with `just dev`, simply run `just dev-restart` to pick up changes (no rebuild needed!)
 - Agent data is stored in `tmp/` directory and persists across restarts
+- OAuth callback server is always available at `http://localhost:9502` in dev mode
 
 **Port reference:**
-- Open WebUI: <http://localhost:3000> (external) → container port 8080 (internal)
-- LiteLLM Proxy: <http://localhost:8890>
+- Open WebUI: <http://localhost:9500> (external) → container port 8080 (internal)
+- LiteLLM Proxy: <http://localhost:9501> (external) → container port 8890 (internal)
+- OAuth Callback: <http://localhost:9502> (external) → container port 8501 (internal)
 
 ### Common Commands
 
 ```bash
+# Quick reference
+just                                           # Show all available commands
+just info                                      # Show project info and service URLs
+
+# Development (containerized with hot reload)
+just dev                                       # Start all services with source mounted
+just dev --build                               # Rebuild images and start
+just dev-restart                               # Restart services after code changes
+just dev-logs -f                               # Follow all logs
+just dev-logs proxy -f                         # Follow proxy logs only
+just dev-stop                                  # Stop all services (preserve data)
+just dev-reset                                 # Remove containers and volumes
+
+# Development (local services)
+just proxy                                     # Run proxy locally (foreground)
+just oauth-callback                            # Run OAuth callback server locally
+
+# Container management
+just container-build                           # Build container images
+just container-rebuild                         # Rebuild without cache
+just container-update --proxy                  # Rebuild and restart specific services
+
 # Testing
-nox -s test                                    # Run unit tests
-nox -s integration                             # Run integration tests (requires running proxy)
+just test                                      # Run unit tests
+just test *ARGS                                # Run tests with custom args
+just test-integration                          # Run integration tests
+just test-eval                                 # Run accuracy evaluations
+just hello                                     # Test running proxy
 uv run pytest tests/test_custom_handler.py -v  # Run specific test
 
-# Development
-podman compose up                              # Easiest: start everything (Quick Start)
-nox -s proxy                                   # Start LiteLLM proxy locally
-nox -s dev                                     # Start full containerized stack (no rebuild)
-nox -s dev_build                               # Build and start (forces rebuild)
-nox -s dev_logs                                # View container logs
-nox -s dev_stop                                # Stop containers (preserve tmp/ data)
-nox -s dev_clean                               # Clean everything (containers + tmp/ directory)
-
 # Code quality
-nox -s format                                  # Format code
-make lint                                      # Run linting
+just format                                    # Format code with ruff
+just lint                                      # Run linting (via make)
+just clean                                     # Clean build artifacts
+
+# Examples
+just example-rhai-releases USER_ID            # Run RHAI releases example
+
+# Utilities
+just sync                                      # Sync dependencies with uv
+just tokens                                    # List users and tokens
+just clean-test-dbs                            # Clean up test databases
 ```
 
 ### Testing the Proxy
 
 ```bash
-# Start proxy
-nox -s proxy
+# Start proxy locally
+just proxy
 
-# Make a request
-curl -X POST http://localhost:8890/v1/chat/completions \
+# Or start containerized with dev overlay
+just dev
+
+# Make a test request
+curl -X POST http://localhost:9501/v1/chat/completions \
   -H "Authorization: Bearer sk-agno-test-key-12345" \
   -H "Content-Type: application/json" \
   -H "X-OpenWebUI-User-Id: test-user" \
@@ -140,7 +217,7 @@ curl -X POST http://localhost:8890/v1/chat/completions \
 
 List models from running proxy:
 ```bash
-curl -X GET http://localhost:8890/v1/models \
+curl -X GET http://localhost:9501/v1/models \
   -H "Authorization: Bearer sk-agno-test-key-12345"
 ```
 
@@ -218,7 +295,7 @@ my-agent = "agentllm.agents.my_agent:MyAgentFactory"
     custom_llm_provider: agno
 ```
 
-5. **Restart proxy**: `nox -s proxy` - Your agent will be auto-discovered!
+5. **Restart proxy**: `just proxy` or `just dev-restart` - Your agent will be auto-discovered!
 
 ## Configuration
 
@@ -230,8 +307,10 @@ Required:
 
 Optional:
 - `OPENAI_API_BASE_URL` - LiteLLM proxy URL for Open WebUI
-  - Development: `http://host.docker.internal:8890/v1` (default)
-  - Production: `http://litellm-proxy:8890/v1`
+  - **Containerized mode** (just dev): `http://litellm-proxy:8890/v1` (recommended)
+  - **Local proxy mode** (just proxy): `http://host.docker.internal:9501/v1`
+  - **Production** (Kubernetes): `http://litellm-proxy-service:8890/v1`
+  - Note: Internal container port is 8890, external host port is 9501
 - `GDRIVE_CLIENT_ID`, `GDRIVE_CLIENT_SECRET` - For Google Drive integration
 - `RELEASE_MANAGER_SYSTEM_PROMPT_GDRIVE_URL` - Extended system prompt URL
 
@@ -349,7 +428,10 @@ agentllm/
 │   ├── agents/
 │   │   ├── creating-agents.md         # Complete agent creation guide
 │   └── templates/                     # Documentation templates
-├── noxfile.py                         # Task automation
+├── justfile                           # Task automation (just command runner)
+├── just/
+│   ├── dev.just                       # Development commands
+│   └── container.just                 # Container management
 ├── proxy_config.yaml                  # Proxy config (symlink to src/)
 ├── AGENTS.md                          # Architecture patterns & developer guide
 └── CLAUDE.md                          # Reference to AGENTS.md
@@ -375,18 +457,18 @@ Ensure `GEMINI_API_KEY` is set in `.env.secrets`. Get your key from [Google AI S
 
 ### Proxy Won't Start
 
-Check that port 8890 is available:
+Check that port 9501 is available:
 
 ```bash
-lsof -i :8890
+lsof -i :9501
 ```
 
 ### Can't Access Open WebUI
 
-- Verify container is running: `podman ps`
-- Check port mapping: Should see `0.0.0.0:3000->8080/tcp`
-- Try http://localhost:3000 (external port, not 8080)
-- Check container logs: `nox -s dev_logs`
+- Verify container is running: `podman ps` or `just dev-status`
+- Check port mapping: Should see `0.0.0.0:9500->8080/tcp`
+- Try http://localhost:9500 (external port, not 8080)
+- Check container logs: `just dev-logs` or `just dev-logs open-webui -f`
 
 ### Reset Agent Data or Clear Credentials
 
@@ -394,15 +476,13 @@ To reset all agent sessions and credentials:
 
 ```bash
 # Stop containers first
-podman compose down
-# or
-nox -s dev_stop
+just dev-stop
 
 # Remove agent data
 rm -rf tmp/
 
 # Restart
-podman compose up
+just dev
 ```
 
 This clears:
@@ -413,10 +493,12 @@ This clears:
 ## Contributing
 
 1. Write tests for new features (TDD workflow)
-2. Run tests: `nox -s test`
-3. Format code: `nox -s format`
-4. Run linting: `make lint`
+2. Run tests: `just test`
+3. Format code: `just format`
+4. Run linting: `just lint`
 5. Update documentation
+
+See all available commands with `just` or `just --list`.
 
 ## License
 
