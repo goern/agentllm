@@ -306,7 +306,8 @@ class TestTokenStorage:
         storage = TokenStorage(db_url="sqlite:///:memory:")
 
         # Test upsert
-        success = storage.upsert_github_token(
+        success = storage.upsert_token(
+            "github",
             user_id="test_user",
             token="ghp_test_token_12345",
             server_url="https://api.github.com",
@@ -314,7 +315,7 @@ class TestTokenStorage:
         assert success is True
 
         # Test get
-        token_data = storage.get_github_token("test_user")
+        token_data = storage.get_token("github", "test_user")
         assert token_data is not None
         assert token_data["token"] == "ghp_test_token_12345"
         assert token_data["server_url"] == "https://api.github.com"
@@ -327,39 +328,38 @@ class TestTokenStorage:
         storage = TokenStorage(db_url="sqlite:///:memory:")
 
         # Store a token
-        storage.upsert_github_token(
+        storage.upsert_token(
+            "github",
             user_id="test_user",
             token="ghp_test_token",
             server_url="https://api.github.com",
         )
 
         # Verify it exists
-        assert storage.get_github_token("test_user") is not None
+        assert storage.get_token("github", "test_user") is not None
 
         # Delete it
-        success = storage.delete_github_token("test_user")
+        success = storage.delete_token("github", "test_user")
         assert success is True
 
         # Verify it's gone
-        assert storage.get_github_token("test_user") is None
+        assert storage.get_token("github", "test_user") is None
 
-    def test_list_users_with_github_tokens(self):
-        """Test listing all users with GitHub tokens."""
+    def test_multiple_users_github_tokens(self):
+        """Test storing GitHub tokens for multiple users."""
         from agentllm.db import TokenStorage
 
         storage = TokenStorage(db_url="sqlite:///:memory:")
 
         # Add multiple users
-        storage.upsert_github_token("user1", "token1", "https://api.github.com")
-        storage.upsert_github_token("user2", "token2", "https://api.github.com")
-        storage.upsert_github_token("user3", "token3", "https://api.github.com")
+        storage.upsert_token("github", "user1", token="token1", server_url="https://api.github.com")
+        storage.upsert_token("github", "user2", token="token2", server_url="https://api.github.com")
+        storage.upsert_token("github", "user3", token="token3", server_url="https://api.github.com")
 
-        # List users
-        users = storage.list_users_with_github_tokens()
-        assert len(users) == 3
-        assert "user1" in users
-        assert "user2" in users
-        assert "user3" in users
+        # Verify each user's token is stored
+        assert storage.get_token("github", "user1")["token"] == "token1"
+        assert storage.get_token("github", "user2")["token"] == "token2"
+        assert storage.get_token("github", "user3")["token"] == "token3"
 
 
 if __name__ == "__main__":

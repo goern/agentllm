@@ -13,9 +13,19 @@ def pytest_configure(config):
     Automatically sets AGNO_DEBUG=true when running tests in verbose mode (-v).
     This provides detailed logging from Agno agents during test execution.
 
+    Also sets up encryption key for token storage tests.
+
     Args:
         config: pytest Config object
     """
+    # Set up encryption key for tests if not already set
+    if "AGENTLLM_TOKEN_ENCRYPTION_KEY" not in os.environ:
+        # Generate a test encryption key
+        from cryptography.fernet import Fernet
+
+        test_key = Fernet.generate_key().decode()
+        os.environ["AGENTLLM_TOKEN_ENCRYPTION_KEY"] = test_key
+
     # Check if verbose mode is enabled (-v or -vv)
     verbose = config.getoption("verbose", 0)
 

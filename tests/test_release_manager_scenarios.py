@@ -129,12 +129,12 @@ def get_configured_user_id() -> str | None:
 def shared_db() -> SqliteDb:
     """Provide the production shared database with real tokens.
 
-    This uses tmp/agno_sessions.db which contains real OAuth tokens
-    from the proxy server.
+    This uses tmp/agent-data/agno_sessions.db which contains real OAuth tokens
+    from the containerized proxy server.
     """
-    db_path = Path("tmp/agno_sessions.db")
+    db_path = Path("tmp/agent-data/agno_sessions.db")
     if not db_path.exists():
-        pytest.skip("Production database not found. Run proxy first: nox -s proxy")
+        pytest.skip("Production database not found. Run development stack first: just dev")
     db = SqliteDb(db_file=str(db_path))
     return db
 
@@ -164,7 +164,7 @@ def configured_user_id() -> str:
 def configured_agent(shared_db, token_storage, configured_user_id):
     """Fixture that provides a ReleaseManager with real toolkits configured.
 
-    This fixture uses real OAuth tokens from tmp/agno_sessions.db
+    This fixture uses real OAuth tokens from tmp/agent-data/agno_sessions.db
     and creates an actual Agno agent using _get_or_create_agent().
 
     The agent is fully configured and ready to make real API calls.
