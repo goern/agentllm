@@ -46,15 +46,11 @@ DB_PATH = Path(log_dir) / "agno_sessions.db"
 shared_db = SqliteDb(db_file=str(DB_PATH))
 logger.info(f"Initialized shared database at {DB_PATH}")
 
-# Import agent configs to register token types in global registry
-# Each config module registers its token model on import
-# fmt: off
-import agentllm.agents.toolkit_configs.gdrive_config  # noqa: E402, F401
-import agentllm.agents.toolkit_configs.github_config  # noqa: E402, F401
-import agentllm.agents.toolkit_configs.jira_config  # noqa: E402, F401
-import agentllm.agents.toolkit_configs.rhcp_config  # noqa: E402, F401
+# Discover and register all toolkit token types
+# This imports all toolkit configs which auto-register their token models
+from agentllm.agents.toolkit_configs import discover_and_register_toolkits  # noqa: E402
 
-# fmt: on
+discover_and_register_toolkits()
 
 # Create token storage using the shared database (with encryption)
 try:
