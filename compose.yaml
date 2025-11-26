@@ -1,24 +1,22 @@
 services:
-  litellm-proxy:
+  proxy:
     build:
       context: .
       dockerfile: Containerfile
-    container_name: litellm-proxy
+    container_name: agentllm-proxy
     networks:
-      - agentllm
+      agentllm:
+        aliases:
+          - litellm-proxy  # Keep old alias for compatibility
     ports:
-      - "8890:8890"
+      - "9501:8890"  # External 9501 -> Internal 8890
     # Load environment variables from shared files
     env_file:
       - .env.shared          # Non-sensitive shared configuration
       - .env.secrets         # Sensitive credentials (git-ignored)
     volumes:
-      # Mount local code for development (hot reload)
-      - ./src/agentllm:/app/agentllm:rw,z
       # Persist database and workspace (local directory for easy access)
       - ./tmp/agent-data:/app/tmp:rw,z
-      # Mount config from project root (for LiteLLM path resolution)
-      - ./proxy_config.yaml:/app/proxy_config.yaml:ro,z
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8890/health/readiness"]
@@ -33,7 +31,7 @@ services:
     networks:
       - agentllm
     ports:
-      - "3000:8080"
+      - "9500:8080"  # External 9500 -> Internal 8080
     # Load environment variables from shared files
     env_file:
       - .env.shared          # Non-sensitive shared configuration
@@ -42,6 +40,7 @@ services:
       # Override: Point to LiteLLM proxy (note: different variable name for OpenWebUI)
       # Compose uses OPENAI_API_BASE_URLS (plural) with the value from OPENAI_API_BASE_URL (singular)
       # Full container mode (both containerized): http://litellm-proxy:8890/v1
+      # Note: Internal port is still 8890, external is 9501
       OPENAI_API_BASE_URLS: "${OPENAI_API_BASE_URL:-http://litellm-proxy:8890/v1}"
       OPENAI_API_KEYS: "${LITELLM_MASTER_KEY:-sk-agno-test-key-12345}"
       ENABLE_SIGNUP: true

@@ -1,0 +1,53 @@
+# Development overrides - mounts local source code for hot reload
+#
+# Usage: just dev (automatically uses this when available)
+#   Or:  podman compose -f compose.yaml -f compose.dev.yaml up
+#
+# After code changes, restart containers to pick up changes:
+#   just dev-restart
+#   Or: podman compose -f compose.yaml -f compose.dev.yaml restart <service>
+#
+# This overlay mounts your local source code into containers so changes
+# are reflected immediately without rebuilding images.
+
+services:
+  proxy:
+    # Override service name to match justfile expectations
+    container_name: agentllm-proxy
+    volumes:
+      # Mount local source code for hot reload
+      - ./src/agentllm:/app/agentllm:ro
+      # Mount proxy config
+      - ./proxy_config.yaml:/app/proxy_config.yaml:ro
+      # Mount custom handler stub
+      - ./custom_handler.py:/app/custom_handler.py:ro
+
+  oauth:
+    # OAuth callback server for development
+    build:
+      context: .
+      dockerfile: src/agentllm/oauth_callback/Containerfile
+    container_name: agentllm-oauth
+    networks:
+      - agentllm
+    ports:
+      - "9502:8501"  # External 9502 -> Internal 8501
+    env_file:
+      - .env.shared
+      - .env.secrets
+    environment:
+      - AGENTLLM_DATA_DIR=/app/tmp
+      # Set callback base URL for local development
+      - AGENTLLM_OAUTH_CALLBACK_BASE_URL=http://localhost:9502
+    volumes:
+      # Share database with proxy
+      - ./tmp/agent-data:/app/tmp:rw,z
+      # Mount local source code for hot reload
+      - ./src/agentllm:/app/agentllm:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
