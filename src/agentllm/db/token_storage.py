@@ -2,14 +2,14 @@
 
 This module provides SQLite-based storage for Jira and Google Drive tokens,
 allowing per-user credential management.
+
+All sensitive tokens are encrypted at rest using Fernet symmetric encryption.
 """
 
-import json
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from google.oauth2.credentials import Credentials
 from loguru import logger
 from sqlalchemy import (
     Column,
@@ -22,6 +22,9 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
+
+from agentllm.db.encryption import DecryptionError, TokenEncryption
+from agentllm.db.token_registry import TokenRegistry, TokenTypeConfig
 
 if TYPE_CHECKING:
     from agno.db.sqlite import SqliteDb
@@ -108,16 +111,21 @@ class TokenStorage:
         db_file: str | Path | None = None,
         db_engine: Engine | None = None,
         agno_db: "SqliteDb | None" = None,
+        encryption_key: str | None = None,
     ):
-        """Initialize token storage with database connection.
+        """Initialize token storage with database connection and encryption.
 
         Args:
             db_url: Database URL (e.g., "sqlite:///tokens.db")
             db_file: Path to SQLite database file
             db_engine: Pre-configured SQLAlchemy engine
             agno_db: Agno SqliteDb instance to reuse its engine (recommended)
+            encryption_key: Fernet encryption key (loads from AGENTLLM_TOKEN_ENCRYPTION_KEY if None)
 
         Priority: agno_db > db_engine > db_url > db_file > default (./tokens.db)
+
+        Raises:
+            EncryptionKeyMissingError: If encryption key is not provided or found in environment
         """
         # Determine database engine
         if agno_db is not None:
@@ -141,10 +149,27 @@ class TokenStorage:
         # Create scoped session
         self.Session = scoped_session(sessionmaker(bind=self.db_engine))
 
+        # Initialize encryption (raises EncryptionKeyMissingError if key not available)
+        self._encryption = TokenEncryption(encryption_key)
+        logger.info("TokenStorage initialized with encryption enabled")
+
+        # Initialize token type registry
+        self._registry = self._initialize_registry()
+        logger.debug(f"Registered {len(self._registry.list_types())} token types")
+
         # Create tables
         self._create_tables()
 
         logger.debug(f"TokenStorage initialized with database: {self.db_engine.url}")
+
+    @property
+    def db_path(self) -> str:
+        """Get the database path from the engine URL.
+
+        Returns:
+            Database path as a string
+        """
+        return str(self.db_engine.url)
 
     def _create_tables(self):
         """Create database tables if they don't exist."""
@@ -168,464 +193,258 @@ class TokenStorage:
             logger.error(f"Error checking if table {table_name} exists: {e}")
             return False
 
-    # Jira Token Operations
+    # Encryption helper methods
 
-    def upsert_jira_token(
-        self,
-        user_id: str,
-        token: str,
-        server_url: str,
-        username: str | None = None,
-    ) -> bool:
-        """Store or update Jira API token for a user.
+    def _encrypt_token(self, plaintext: str) -> str:
+        """Encrypt token for database storage.
 
         Args:
+            plaintext: The token string to encrypt
+
+        Returns:
+            Encrypted token (base64 string)
+
+        Raises:
+            EncryptionError: If encryption fails
+        """
+        try:
+            return self._encryption.encrypt(plaintext)
+        except Exception as e:
+            logger.error(f"Token encryption failed: {e}")
+            raise
+
+    def _decrypt_token(self, encrypted: str) -> str:
+        """Decrypt token from database storage.
+
+        Args:
+            encrypted: The encrypted token from database
+
+        Returns:
+            Decrypted plaintext token
+
+        Raises:
+            DecryptionError: If decryption fails
+        """
+        try:
+            return self._encryption.decrypt(encrypted)
+        except Exception as e:
+            logger.error(f"Token decryption failed: {e}")
+            raise
+
+    # Token Type Registry
+
+    def _initialize_registry(self) -> TokenRegistry:
+        """Initialize token type registry with all known token types.
+
+        Returns:
+            Configured TokenRegistry instance
+        """
+        registry = TokenRegistry()
+
+        # Register Jira tokens
+        registry.register(
+            "jira",
+            TokenTypeConfig(
+                model=JiraToken,
+                encrypted_fields=["token"],
+            ),
+        )
+
+        # Register GitHub tokens
+        registry.register(
+            "github",
+            TokenTypeConfig(
+                model=GitHubToken,
+                encrypted_fields=["token"],
+            ),
+        )
+
+        # Register Google Drive tokens
+        # Import serializers from gdrive_config (late import to avoid circular dependency)
+        from agentllm.agents.toolkit_configs.gdrive_config import (
+            deserialize_gdrive_credentials,
+            serialize_gdrive_credentials,
+        )
+
+        registry.register(
+            "gdrive",
+            TokenTypeConfig(
+                model=GoogleDriveToken,
+                encrypted_fields=["token", "refresh_token", "client_secret"],
+                serializer=serialize_gdrive_credentials,
+                deserializer=deserialize_gdrive_credentials,
+            ),
+        )
+
+        # Register RHCP tokens
+        registry.register(
+            "rhcp",
+            TokenTypeConfig(
+                model=RHCPToken,
+                encrypted_fields=["offline_token"],
+            ),
+        )
+
+        return registry
+
+    # Generic Token Operations
+
+    def upsert_token(self, token_type: str, user_id: str, **data: Any) -> bool:
+        """Store or update token for a user (generic method).
+
+        Args:
+            token_type: Token type identifier (e.g., "jira", "github", "gdrive", "rhcp")
             user_id: Unique user identifier
-            token: Jira API token or personal access token
-            server_url: Jira server URL (e.g., "https://issues.redhat.com")
-            username: Optional username for basic auth
+            **data: Token data fields (varies by token type)
 
         Returns:
             True if successful, False otherwise
+
+        Raises:
+            KeyError: If token_type is not registered
+
+        Example:
+            >>> storage.upsert_token("jira", "user123", token="abc", server_url="https://jira.com")
+            >>> storage.upsert_token("github", "user123", token="ghp_xyz", server_url="https://api.github.com")
         """
         try:
+            config = self._registry.get(token_type)
+
             with self.Session() as sess:
                 # Check if token exists
-                existing = sess.query(JiraToken).filter_by(user_id=user_id).first()
+                existing = sess.query(config.model).filter_by(user_id=user_id).first()
+
+                # Prepare data for storage
+                storage_data = data.copy()
+
+                # Apply serializer if configured (e.g., for Google Credentials)
+                if config.serializer and "credentials" in data:
+                    storage_data = config.serializer(data["credentials"])
+
+                # Encrypt sensitive fields
+                for field_name in config.encrypted_fields:
+                    if field_name in storage_data and storage_data[field_name]:
+                        storage_data[field_name] = self._encrypt_token(storage_data[field_name])
 
                 if existing:
                     # Update existing token
-                    existing.token = token
-                    existing.server_url = server_url
-                    existing.username = username
+                    for key, value in storage_data.items():
+                        if hasattr(existing, key):
+                            setattr(existing, key, value)
                     existing.updated_at = datetime.utcnow()
-                    logger.debug(f"Updating Jira token for user {user_id}")
+                    logger.debug(f"Updating {token_type} token for user {user_id}")
                 else:
                     # Insert new token
-                    new_token = JiraToken(
-                        user_id=user_id,
-                        token=token,
-                        server_url=server_url,
-                        username=username,
-                    )
+                    new_token = config.model(user_id=user_id, **storage_data)
                     sess.add(new_token)
-                    logger.debug(f"Inserting new Jira token for user {user_id}")
+                    logger.debug(f"Inserting new {token_type} token for user {user_id}")
 
                 sess.commit()
                 return True
 
+        except KeyError:
+            logger.error(f"Unknown token type: {token_type}")
+            raise
         except Exception as e:
-            logger.error(f"Error upserting Jira token for user {user_id}: {e}")
+            logger.error(f"Error upserting {token_type} token for user {user_id}: {e}")
             return False
 
-    def get_jira_token(self, user_id: str) -> dict[str, Any] | None:
-        """Retrieve Jira token for a user.
+    def get_token(self, token_type: str, user_id: str) -> dict[str, Any] | Any | None:
+        """Retrieve token for a user (generic method).
 
         Args:
+            token_type: Token type identifier
             user_id: Unique user identifier
 
         Returns:
-            Dictionary with token data, or None if not found
+            Dictionary with token data (or deserialized object if deserializer configured),
+            or None if not found or decryption fails
+
+        Raises:
+            KeyError: If token_type is not registered
+
+        Example:
+            >>> jira_data = storage.get_token("jira", "user123")
+            >>> print(jira_data["token"])  # Decrypted token
+            >>> gdrive_creds = storage.get_token("gdrive", "user123")  # Returns Credentials object
         """
         try:
+            config = self._registry.get(token_type)
+
             with self.Session() as sess:
-                token_record = sess.query(JiraToken).filter_by(user_id=user_id).first()
+                token_record = sess.query(config.model).filter_by(user_id=user_id).first()
 
-                if token_record:
-                    return {
-                        "user_id": token_record.user_id,
-                        "token": token_record.token,
-                        "server_url": token_record.server_url,
-                        "username": token_record.username,
-                        "created_at": token_record.created_at,
-                        "updated_at": token_record.updated_at,
-                    }
+                if not token_record:
+                    return None
 
-                return None
+                # Convert SQLAlchemy model to dict
+                token_data = {}
+                for column in config.model.__table__.columns:
+                    value = getattr(token_record, column.name)
+                    token_data[column.name] = value
 
+                # Decrypt sensitive fields
+                for field_name in config.encrypted_fields:
+                    if field_name in token_data and token_data[field_name]:
+                        try:
+                            token_data[field_name] = self._decrypt_token(token_data[field_name])
+                        except DecryptionError as e:
+                            logger.error(f"Failed to decrypt {token_type} {field_name} for user {user_id}: {e}")
+                            return None
+
+                # Apply deserializer if configured (e.g., for Google Credentials)
+                if config.deserializer:
+                    return config.deserializer(token_data)
+
+                return token_data
+
+        except KeyError:
+            logger.error(f"Unknown token type: {token_type}")
+            raise
         except Exception as e:
-            logger.error(f"Error retrieving Jira token for user {user_id}: {e}")
+            logger.error(f"Error retrieving {token_type} token for user {user_id}: {e}")
             return None
 
-    def delete_jira_token(self, user_id: str) -> bool:
-        """Delete Jira token for a user.
+    def delete_token(self, token_type: str, user_id: str) -> bool:
+        """Delete token for a user (generic method).
 
         Args:
+            token_type: Token type identifier
             user_id: Unique user identifier
 
         Returns:
             True if successful, False otherwise
+
+        Raises:
+            KeyError: If token_type is not registered
+
+        Example:
+            >>> storage.delete_token("jira", "user123")
+            >>> storage.delete_token("github", "user123")
         """
         try:
+            config = self._registry.get(token_type)
+
             with self.Session() as sess:
-                token_record = sess.query(JiraToken).filter_by(user_id=user_id).first()
+                token_record = sess.query(config.model).filter_by(user_id=user_id).first()
 
                 if token_record:
                     sess.delete(token_record)
                     sess.commit()
-                    logger.debug(f"Deleted Jira token for user {user_id}")
+                    logger.debug(f"Deleted {token_type} token for user {user_id}")
                     return True
 
-                logger.warning(f"No Jira token found for user {user_id}")
+                logger.warning(f"No {token_type} token found for user {user_id}")
                 return False
 
+        except KeyError:
+            logger.error(f"Unknown token type: {token_type}")
+            raise
         except Exception as e:
-            logger.error(f"Error deleting Jira token for user {user_id}: {e}")
+            logger.error(f"Error deleting {token_type} token for user {user_id}: {e}")
             return False
 
-    # Google Drive Token Operations
-
-    def upsert_gdrive_token(
-        self,
-        user_id: str,
-        credentials: Credentials,
-    ) -> bool:
-        """Store or update Google Drive OAuth credentials for a user.
-
-        Args:
-            user_id: Unique user identifier
-            credentials: Google OAuth2 credentials object
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            with self.Session() as sess:
-                # Serialize scopes as JSON
-                scopes_json = json.dumps(credentials.scopes) if credentials.scopes else None
-
-                # Check if token exists
-                existing = sess.query(GoogleDriveToken).filter_by(user_id=user_id).first()
-
-                if existing:
-                    # Update existing token
-                    existing.token = credentials.token
-                    existing.refresh_token = credentials.refresh_token
-                    existing.token_uri = credentials.token_uri
-                    existing.client_id = credentials.client_id
-                    existing.client_secret = credentials.client_secret
-                    existing.scopes = scopes_json
-                    existing.expiry = credentials.expiry
-                    existing.updated_at = datetime.utcnow()
-                    logger.debug(f"Updating Google Drive token for user {user_id}")
-                else:
-                    # Insert new token
-                    new_token = GoogleDriveToken(
-                        user_id=user_id,
-                        token=credentials.token,
-                        refresh_token=credentials.refresh_token,
-                        token_uri=credentials.token_uri,
-                        client_id=credentials.client_id,
-                        client_secret=credentials.client_secret,
-                        scopes=scopes_json,
-                        expiry=credentials.expiry,
-                    )
-                    sess.add(new_token)
-                    logger.debug(f"Inserting new Google Drive token for user {user_id}")
-
-                sess.commit()
-                return True
-
-        except Exception as e:
-            logger.error(f"Error upserting Google Drive token for user {user_id}: {e}")
-            return False
-
-    def get_gdrive_credentials(self, user_id: str) -> Credentials | None:
-        """Retrieve Google Drive OAuth credentials for a user.
-
-        Args:
-            user_id: Unique user identifier
-
-        Returns:
-            Google OAuth2 Credentials object, or None if not found
-        """
-        try:
-            with self.Session() as sess:
-                token_record = sess.query(GoogleDriveToken).filter_by(user_id=user_id).first()
-
-                if token_record:
-                    # Deserialize scopes
-                    scopes = json.loads(token_record.scopes) if token_record.scopes else None
-
-                    # Reconstruct Credentials object
-                    credentials = Credentials(
-                        token=token_record.token,
-                        refresh_token=token_record.refresh_token,
-                        token_uri=token_record.token_uri,
-                        client_id=token_record.client_id,
-                        client_secret=token_record.client_secret,
-                        scopes=scopes,
-                    )
-
-                    # Set expiry if available
-                    if token_record.expiry:
-                        credentials.expiry = token_record.expiry
-
-                    return credentials
-
-                return None
-
-        except Exception as e:
-            logger.error(f"Error retrieving Google Drive token for user {user_id}: {e}")
-            return None
-
-    def get_gdrive_token_info(self, user_id: str) -> dict[str, Any] | None:
-        """Retrieve Google Drive token metadata (without reconstructing Credentials).
-
-        Args:
-            user_id: Unique user identifier
-
-        Returns:
-            Dictionary with token metadata, or None if not found
-        """
-        try:
-            with self.Session() as sess:
-                token_record = sess.query(GoogleDriveToken).filter_by(user_id=user_id).first()
-
-                if token_record:
-                    return {
-                        "user_id": token_record.user_id,
-                        "token": token_record.token[:20] + "...",  # Truncated for security
-                        "has_refresh_token": token_record.refresh_token is not None,
-                        "scopes": (json.loads(token_record.scopes) if token_record.scopes else None),
-                        "expiry": token_record.expiry,
-                        "created_at": token_record.created_at,
-                        "updated_at": token_record.updated_at,
-                    }
-
-                return None
-
-        except Exception as e:
-            logger.error(f"Error retrieving Google Drive token info for user {user_id}: {e}")
-            return None
-
-    def delete_gdrive_token(self, user_id: str) -> bool:
-        """Delete Google Drive token for a user.
-
-        Args:
-            user_id: Unique user identifier
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            with self.Session() as sess:
-                token_record = sess.query(GoogleDriveToken).filter_by(user_id=user_id).first()
-
-                if token_record:
-                    sess.delete(token_record)
-                    sess.commit()
-                    logger.debug(f"Deleted Google Drive token for user {user_id}")
-                    return True
-
-                logger.warning(f"No Google Drive token found for user {user_id}")
-                return False
-
-        except Exception as e:
-            logger.error(f"Error deleting Google Drive token for user {user_id}: {e}")
-            return False
-
-    # GitHub Token Operations
-
-    def upsert_github_token(
-        self,
-        user_id: str,
-        token: str,
-        server_url: str = "https://api.github.com",
-        username: str | None = None,
-    ) -> bool:
-        """Store or update GitHub API token for a user.
-
-        Args:
-            user_id: Unique user identifier
-            token: GitHub personal access token
-            server_url: GitHub API server URL (default: "https://api.github.com")
-            username: Optional GitHub username
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            with self.Session() as sess:
-                # Check if token exists
-                existing = sess.query(GitHubToken).filter_by(user_id=user_id).first()
-
-                if existing:
-                    # Update existing token
-                    existing.token = token
-                    existing.server_url = server_url
-                    existing.username = username
-                    existing.updated_at = datetime.utcnow()
-                    logger.debug(f"Updating GitHub token for user {user_id}")
-                else:
-                    # Insert new token
-                    new_token = GitHubToken(
-                        user_id=user_id,
-                        token=token,
-                        server_url=server_url,
-                        username=username,
-                    )
-                    sess.add(new_token)
-                    logger.debug(f"Inserting new GitHub token for user {user_id}")
-
-                sess.commit()
-                return True
-
-        except Exception as e:
-            logger.error(f"Error upserting GitHub token for user {user_id}: {e}")
-            return False
-
-    def get_github_token(self, user_id: str) -> dict[str, Any] | None:
-        """Retrieve GitHub token for a user.
-
-        Args:
-            user_id: Unique user identifier
-
-        Returns:
-            Dictionary with token data, or None if not found
-        """
-        try:
-            with self.Session() as sess:
-                token_record = sess.query(GitHubToken).filter_by(user_id=user_id).first()
-
-                if token_record:
-                    return {
-                        "user_id": token_record.user_id,
-                        "token": token_record.token,
-                        "server_url": token_record.server_url,
-                        "username": token_record.username,
-                        "created_at": token_record.created_at,
-                        "updated_at": token_record.updated_at,
-                    }
-
-                return None
-
-        except Exception as e:
-            logger.error(f"Error retrieving GitHub token for user {user_id}: {e}")
-            return None
-
-    def delete_github_token(self, user_id: str) -> bool:
-        """Delete GitHub token for a user.
-
-        Args:
-            user_id: Unique user identifier
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            with self.Session() as sess:
-                token_record = sess.query(GitHubToken).filter_by(user_id=user_id).first()
-
-                if token_record:
-                    sess.delete(token_record)
-                    sess.commit()
-                    logger.debug(f"Deleted GitHub token for user {user_id}")
-                    return True
-
-                logger.warning(f"No GitHub token found for user {user_id}")
-                return False
-
-        except Exception as e:
-            logger.error(f"Error deleting GitHub token for user {user_id}: {e}")
-            return False
-
-    # RHCP Token Operations
-
-    def upsert_rhcp_token(
-        self,
-        user_id: str,
-        offline_token: str,
-    ) -> bool:
-        """Store or update Red Hat Customer Portal offline token for a user.
-
-        Args:
-            user_id: Unique user identifier
-            offline_token: RHCP offline token for obtaining access tokens
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            with self.Session() as sess:
-                # Check if token exists
-                existing = sess.query(RHCPToken).filter_by(user_id=user_id).first()
-
-                if existing:
-                    # Update existing token
-                    existing.offline_token = offline_token
-                    existing.updated_at = datetime.utcnow()
-                    logger.debug(f"Updating RHCP token for user {user_id}")
-                else:
-                    # Insert new token
-                    new_token = RHCPToken(
-                        user_id=user_id,
-                        offline_token=offline_token,
-                    )
-                    sess.add(new_token)
-                    logger.debug(f"Inserting new RHCP token for user {user_id}")
-
-                sess.commit()
-                return True
-
-        except Exception as e:
-            logger.error(f"Error upserting RHCP token for user {user_id}: {e}")
-            return False
-
-    def get_rhcp_token(self, user_id: str) -> dict[str, Any] | None:
-        """Retrieve RHCP offline token for a user.
-
-        Args:
-            user_id: Unique user identifier
-
-        Returns:
-            Dictionary with token data, or None if not found
-        """
-        try:
-            with self.Session() as sess:
-                token_record = sess.query(RHCPToken).filter_by(user_id=user_id).first()
-
-                if token_record:
-                    return {
-                        "user_id": token_record.user_id,
-                        "offline_token": token_record.offline_token,
-                        "created_at": token_record.created_at,
-                        "updated_at": token_record.updated_at,
-                    }
-
-                return None
-
-        except Exception as e:
-            logger.error(f"Error retrieving RHCP token for user {user_id}: {e}")
-            return None
-
-    def delete_rhcp_token(self, user_id: str) -> bool:
-        """Delete RHCP token for a user.
-
-        Args:
-            user_id: Unique user identifier
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            with self.Session() as sess:
-                token_record = sess.query(RHCPToken).filter_by(user_id=user_id).first()
-
-                if token_record:
-                    sess.delete(token_record)
-                    sess.commit()
-                    logger.debug(f"Deleted RHCP token for user {user_id}")
-                    return True
-
-                logger.warning(f"No RHCP token found for user {user_id}")
-                return False
-
-        except Exception as e:
-            logger.error(f"Error deleting RHCP token for user {user_id}: {e}")
-            return False
-
-    # Favorite Color Operations
+    # Favorite Color Operations (demo agent - not using registry since it doesn't need encryption)
 
     def upsert_favorite_color(self, user_id: str, color: str) -> bool:
         """Store or update favorite color for a user.
@@ -712,68 +531,6 @@ class TokenStorage:
         except Exception as e:
             logger.error(f"Error deleting favorite color for user {user_id}: {e}")
             return False
-
-    # Utility Methods
-
-    def list_users_with_jira_tokens(self) -> list[str]:
-        """Get list of all user IDs with stored Jira tokens.
-
-        Returns:
-            List of user IDs
-        """
-        try:
-            with self.Session() as sess:
-                results = sess.query(JiraToken.user_id).all()
-                return [r[0] for r in results]
-
-        except Exception as e:
-            logger.error(f"Error listing users with Jira tokens: {e}")
-            return []
-
-    def list_users_with_gdrive_tokens(self) -> list[str]:
-        """Get list of all user IDs with stored Google Drive tokens.
-
-        Returns:
-            List of user IDs
-        """
-        try:
-            with self.Session() as sess:
-                results = sess.query(GoogleDriveToken.user_id).all()
-                return [r[0] for r in results]
-
-        except Exception as e:
-            logger.error(f"Error listing users with Google Drive tokens: {e}")
-            return []
-
-    def list_users_with_github_tokens(self) -> list[str]:
-        """Get list of all user IDs with stored GitHub tokens.
-
-        Returns:
-            List of user IDs
-        """
-        try:
-            with self.Session() as sess:
-                results = sess.query(GitHubToken.user_id).all()
-                return [r[0] for r in results]
-
-        except Exception as e:
-            logger.error(f"Error listing users with GitHub tokens: {e}")
-            return []
-
-    def list_users_with_rhcp_tokens(self) -> list[str]:
-        """Get list of all user IDs with stored RHCP tokens.
-
-        Returns:
-            List of user IDs
-        """
-        try:
-            with self.Session() as sess:
-                results = sess.query(RHCPToken.user_id).all()
-                return [r[0] for r in results]
-
-        except Exception as e:
-            logger.error(f"Error listing users with RHCP tokens: {e}")
-            return []
 
     def close(self):
         """Close database connection and cleanup."""

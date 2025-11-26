@@ -172,11 +172,35 @@ gdrive_tools = GoogleDriveTools(credentials=credentials)
 
 ## Security Considerations
 
-1. **File Permissions**: Ensure the SQLite database file has appropriate permissions
-2. **Encryption**: Consider encrypting the database file at rest
-3. **Access Control**: Implement user authentication before allowing token access
-4. **Token Rotation**: Regularly rotate tokens and update the database
-5. **Audit Logging**: Track token access and modifications
+### Token Encryption (REQUIRED)
+
+All sensitive tokens are encrypted at rest using Fernet symmetric encryption:
+
+1. **Encryption Key**: Set `AGENTLLM_TOKEN_ENCRYPTION_KEY` environment variable
+   - Generate: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+   - Store securely in Kubernetes Secrets (production) or `.env.secrets` (local dev)
+   - **CRITICAL**: If key is lost, all stored tokens are unrecoverable
+
+2. **Encrypted Fields**:
+   - Jira: `token`
+   - GitHub: `token`
+   - Google Drive: `token`, `refresh_token`, `client_secret`
+   - RHCP: `offline_token`
+
+3. **Fail-Fast Behavior**:
+   - Application fails to start if encryption key not provided
+   - Decryption failures return `None` (logged as errors)
+   - No plaintext fallback
+
+### Additional Security Measures
+
+4. **File Permissions**: Ensure SQLite database file has restrictive permissions (600)
+5. **Access Control**: Implement user authentication before token access
+6. **Token Rotation**: Regularly rotate tokens and update database
+7. **Audit Logging**: Track token access and modifications
+8. **Key Rotation**: Not supported in v1 - changing key invalidates all tokens
+
+For production deployment guidance, see `docs/deployment-encryption.md`.
 
 ## Examples
 
